@@ -28,7 +28,9 @@ class MockAiGateway : AiGateway {
         }.distinct().take(3)
 
         val contexts = buildList {
-            if (combined.containsAny("yorgun", "bitkin", "enerjim yok", "tired")) add("yorgunluk")
+            if (combined.containsAny("yorgun", "yorul", "bitkin", "enerjim yok", "tired")) {
+                add("yorgunluk")
+            }
             if (
                 combined.containsAny(
                     "ertel",
@@ -80,10 +82,13 @@ class MockAiGateway : AiGateway {
         input: InterventionInput,
     ): AiCard {
         val state = input.stateId.ifBlank { inferState(input.text) }
-        val preferred = profile.personalization.preferredActivities
-            .firstOrNull()
-            ?: profile.hobbies.firstOrNull()
-            ?: profile.improvementArea.takeIf(String::isNotBlank)
+        val preferred = sequenceOf(
+            profile.personalization.preferredActivities.firstOrNull(),
+            profile.hobbies.firstOrNull(),
+            profile.improvementArea.takeIf(String::isNotBlank),
+        ).filterNotNull().firstOrNull(SafetyLanguageValidator::isDisplaySafe)
+        val safeGoal = profile.personalization.goals
+            .firstOrNull(SafetyLanguageValidator::isDisplaySafe)
 
         val question = when (state) {
             "tired" -> "Şu anda kısa bir dinlenme mi, yoksa otomatik bir kaydırma mı arıyorsun?"
@@ -96,10 +101,11 @@ class MockAiGateway : AiGateway {
         }
 
         val alternative = when (state) {
-            "tired" -> profile.personalization.lowEnergyActivities.firstOrNull()
+            "tired" -> profile.personalization.lowEnergyActivities
+                .firstOrNull(SafetyLanguageValidator::isDisplaySafe)
                 ?.let { "$it için yalnızca iki dakika ayırabilirsin." }
                 ?: "Bir şarkı boyunca telefonu bırakıp gözlerini dinlendirebilirsin."
-            "procrastinating" -> profile.personalization.goals.firstOrNull()
+            "procrastinating" -> safeGoal
                 ?.let { "$it için yalnızca ilk iki dakikalık adımı başlatabilirsin." }
                 ?: "Ertelediğin işin yalnızca ilk iki dakikasını yapabilirsin."
             "relaxing" -> "Bunu bilinçli bir mola olarak seçiyorsan 10 dakikalık bir zamanlayıcı kurup sonra yeniden karar verebilirsin."
@@ -166,7 +172,7 @@ class MockAiGateway : AiGateway {
     private fun inferState(text: String): String {
         val normalized = text.lowercase()
         return when {
-            normalized.containsAny("yorgun", "bitkin", "tired") -> "tired"
+            normalized.containsAny("yorgun", "yorul", "bitkin", "tired") -> "tired"
             normalized.containsAny("ertel", "başlayam", "başlamak yerine", "oyalan", "procrast") -> "procrastinating"
             normalized.containsAny("dinlen", "rahatla", "kafa dağıt") -> "relaxing"
             normalized.containsAny("sıkıl", "bored") -> "bored"
