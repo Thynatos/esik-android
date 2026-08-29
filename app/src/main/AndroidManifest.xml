@@ -31,7 +31,6 @@
             android:name=".voice.VoiceInputActivity"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:noHistory="true"
             android:theme="@style/Theme.Esik.Transparent" />
 
         <activity
