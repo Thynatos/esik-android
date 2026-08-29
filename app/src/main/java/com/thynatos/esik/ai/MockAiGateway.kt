@@ -86,9 +86,12 @@ class MockAiGateway : AiGateway {
             profile.personalization.preferredActivities.firstOrNull(),
             profile.hobbies.firstOrNull(),
             profile.improvementArea.takeIf(String::isNotBlank),
-        ).filterNotNull().firstOrNull(SafetyLanguageValidator::isDisplaySafe)
-        val safeGoal = profile.personalization.goals
-            .firstOrNull(SafetyLanguageValidator::isDisplaySafe)
+        ).filterNotNull().firstOrNull { value ->
+            SafetyLanguageValidator.isDisplaySafe(value)
+        }
+        val safeGoal = profile.personalization.goals.firstOrNull { value ->
+            SafetyLanguageValidator.isDisplaySafe(value)
+        }
 
         val question = when (state) {
             "tired" -> "Şu anda kısa bir dinlenme mi, yoksa otomatik bir kaydırma mı arıyorsun?"
@@ -102,7 +105,7 @@ class MockAiGateway : AiGateway {
 
         val alternative = when (state) {
             "tired" -> profile.personalization.lowEnergyActivities
-                .firstOrNull(SafetyLanguageValidator::isDisplaySafe)
+                .firstOrNull { value -> SafetyLanguageValidator.isDisplaySafe(value) }
                 ?.let { "$it için yalnızca iki dakika ayırabilirsin." }
                 ?: "Bir şarkı boyunca telefonu bırakıp gözlerini dinlendirebilirsin."
             "procrastinating" -> safeGoal
@@ -152,9 +155,9 @@ class MockAiGateway : AiGateway {
             "“$it” seçtiğin anlarda verdiğin kararlar arasında bir örüntü olabilir mi?"
         } ?: "Akşam saatlerindeki girişler yorgunluk veya alışkanlıkla bağlantılı olabilir mi?"
 
-        val safeGoal = profile.personalization.goals.firstOrNull()
+        val reportGoal = profile.personalization.goals.firstOrNull()
             ?.takeIf { SafetyLanguageValidator.isDisplaySafe(it) }
-        val microStep = safeGoal?.let {
+        val microStep = reportGoal?.let {
             "Yarın $it için telefonu açmadan önce iki dakikalık tek bir başlangıç yap."
         } ?: "Yarın ilk müdahalede telefonu iki dakika uzağa bırakıp sonra yeniden karar ver."
 
