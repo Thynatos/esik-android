@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.thynatos.esik.ai.AiGateway
+import com.thynatos.esik.ai.CrisisFilter
 import com.thynatos.esik.ai.MockAiGateway
 import com.thynatos.esik.data.PersonalizationProfile
 import com.thynatos.esik.data.ProfileIntake
@@ -118,15 +119,32 @@ fun OnboardingScreen(
         if (!valid || isGeneratingProfile) return
         isGeneratingProfile = true
         profileMessage = null
+        val currentIntake = intake()
+        val crisisSignal = CrisisFilter.check(
+            listOf(
+                currentIntake.biography,
+                currentIntake.reason,
+                currentIntake.improvementArea,
+            ).joinToString(" "),
+        ).isCrisisSignal
+
         scope.launch {
-            val generated = try {
-                aiGateway.generateProfile(intake())
-            } catch (_: Exception) {
-                MockAiGateway().generateProfile(intake())
+            val generated = if (crisisSignal) {
+                MockAiGateway().generateProfile(currentIntake)
+            } else {
+                try {
+                    aiGateway.generateProfile(currentIntake)
+                } catch (_: Exception) {
+                    MockAiGateway().generateProfile(currentIntake)
+                }
             }
             generatedProfile = generated
             isGeneratingProfile = false
-            profileMessage = "Profil özeti cihazında saklanır. Canlı AI açıksa üretim sırasında anlatım metni Anthropic API'ye gönderilir."
+            profileMessage = if (crisisSignal) {
+                "Bunu tek başına taşımak zorunda değilsin. Yakınındaki acil yardım hizmetine, güvendiğin bir kişiye veya profesyonel desteğe şimdi ulaş. Bu metin AI servisine gönderilmedi."
+            } else {
+                "Profil özeti cihazında saklanır. Canlı AI açıksa üretim sırasında anlatım metni Anthropic API'ye gönderilir."
+            }
             onReady(generated)
         }
     }
