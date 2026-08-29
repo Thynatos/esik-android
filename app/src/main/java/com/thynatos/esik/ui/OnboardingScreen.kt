@@ -143,7 +143,7 @@ fun OnboardingScreen(
             profileMessage = if (crisisSignal) {
                 "Bunu tek başına taşımak zorunda değilsin. Yakınındaki acil yardım hizmetine, güvendiğin bir kişiye veya profesyonel desteğe şimdi ulaş. Bu metin AI servisine gönderilmedi."
             } else {
-                "Profil özeti cihazında saklanır. Canlı AI açıksa üretim sırasında anlatım metni Anthropic API'ye gönderilir."
+                "Profil özeti cihazında saklanır. Canlı AI açıksa üretim sırasında anlatım metni Gemini API'ye gönderilir."
             }
             onReady(generated)
         }
@@ -158,7 +158,7 @@ fun OnboardingScreen(
     ) {
         Text("Eşik", style = MaterialTheme.typography.headlineLarge)
         Text(
-            "Hesap yok. Kayıtlar cihazında tutulur. Canlı AI açıksa ilgili metin Anthropic API'ye; sesli giriş ise telefonundaki konuşma tanıma hizmetine gönderilebilir.",
+            "Hesap yok. Kayıtlar cihazında tutulur. Canlı AI açıksa ilgili metin Gemini API'ye; sesli giriş ise telefonundaki konuşma tanıma hizmetine gönderilebilir.",
             style = MaterialTheme.typography.bodyMedium,
         )
 
