@@ -61,7 +61,7 @@ class UsageMonitorService : Service() {
 
     override fun onDestroy() {
         if (::executor.isInitialized) executor.shutdownNow()
-        if (::overlayController.isInitialized) overlayController.dismiss()
+        if (::overlayController.isInitialized) overlayController.close()
         debugState("service destroyed")
         super.onDestroy()
     }
