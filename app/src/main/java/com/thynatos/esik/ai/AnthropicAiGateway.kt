@@ -32,7 +32,7 @@ class AnthropicAiGateway(
     private val client: AnthropicMessageClient = AnthropicMessageClient(apiKey),
 ) : AiGateway {
     override suspend fun generateProfile(intake: ProfileIntake): PersonalizationProfile {
-        if (!client.isConfigured || CrisisFilter.check(intake.biography).isCrisisSignal) {
+        if (!client.isConfigured || containsCrisisSignal(intake.externalText())) {
             return fallback.generateProfile(intake)
         }
 
@@ -54,7 +54,14 @@ class AnthropicAiGateway(
         currentUsageMinutes: Int,
         input: InterventionInput,
     ): AiCard {
-        if (!client.isConfigured || CrisisFilter.check(input.text).isCrisisSignal) {
+        val externalContext = listOf(
+            input.text,
+            profile.reason,
+            profile.personalization.goals.joinToString(" "),
+            profile.personalization.preferredActivities.joinToString(" "),
+            profile.personalization.lowEnergyActivities.joinToString(" "),
+        ).joinToString(" ")
+        if (!client.isConfigured || containsCrisisSignal(externalContext)) {
             return fallback.generateCard(profile, currentUsageMinutes, input)
         }
 
@@ -81,7 +88,20 @@ class AnthropicAiGateway(
         records: List<InterventionRecord>,
         currentUsageMinutes: Int,
     ): DailyReport {
-        if (records.size < REPORT_MINIMUM_RECORDS || !client.isConfigured) {
+        val externalContext = buildString {
+            append(profile.reason)
+            append(' ')
+            append(profile.personalization.goals.joinToString(" "))
+            records.forEach { record ->
+                append(' ')
+                append(record.text)
+            }
+        }
+        if (
+            records.size < REPORT_MINIMUM_RECORDS ||
+            !client.isConfigured ||
+            containsCrisisSignal(externalContext)
+        ) {
             return fallback.generateDailyReport(profile, records, currentUsageMinutes)
         }
 
@@ -91,6 +111,8 @@ class AnthropicAiGateway(
                 systemPrompt = AiPrompts.REPORT_SYSTEM_PROMPT,
                 userPrompt = reportInputJson(profile, records, currentUsageMinutes).toString(2),
                 maxTokens = 500,
+                disableThinking = reportModel.startsWith("claude-sonnet-5") ||
+                    reportModel.startsWith("claude-opus-5"),
             )
             val content = extractJson(raw)
             val observation = content.optString("observation_question").trim().take(220)
@@ -128,10 +150,13 @@ class AnthropicAiGateway(
             .take(6)
 
         return PersonalizationProfile(
-            goals = json.optJSONArray("goals").toStringList(maxItems = 3),
-            recurringContexts = json.optJSONArray("recurring_contexts").toStringList(maxItems = 4),
-            preferredActivities = json.optJSONArray("preferred_activities").toStringList(maxItems = 5),
-            lowEnergyActivities = json.optJSONArray("low_energy_activities").toStringList(maxItems = 3),
+            goals = json.optJSONArray("goals").toSafeStringList(maxItems = 3),
+            recurringContexts = json.optJSONArray("recurring_contexts")
+                .toSafeStringList(maxItems = 4),
+            preferredActivities = json.optJSONArray("preferred_activities")
+                .toSafeStringList(maxItems = 5),
+            lowEnergyActivities = json.optJSONArray("low_energy_activities")
+                .toSafeStringList(maxItems = 3),
             quickStates = completedStates,
             tone = ProfileTone.fromStorage(json.optString("tone")),
         )
@@ -209,12 +234,14 @@ class AnthropicAiGateway(
             },
         )
 
-    private fun JSONArray?.toStringList(maxItems: Int): List<String> {
+    private fun JSONArray?.toSafeStringList(maxItems: Int): List<String> {
         if (this == null) return emptyList()
         return buildList {
             for (index in 0 until length()) {
                 val value = optString(index).trim().take(MAX_PROFILE_ITEM_CHARS)
-                if (value.isNotBlank()) add(value)
+                if (value.isNotBlank() && SafetyLanguageValidator.isDisplaySafe(value)) {
+                    add(value)
+                }
                 if (size >= maxItems) break
             }
         }.distinct()
@@ -229,7 +256,13 @@ class AnthropicAiGateway(
                     .trim('_')
                     .take(40)
                 val label = item.optString("label").trim().take(70)
-                if (id.isBlank() || label.isBlank()) continue
+                if (
+                    id.isBlank() ||
+                    label.isBlank() ||
+                    !SafetyLanguageValidator.isDisplaySafe(label)
+                ) {
+                    continue
+                }
                 add(
                     QuickStateOption(
                         id = id,
@@ -242,6 +275,17 @@ class AnthropicAiGateway(
             }
         }
     }
+
+    private fun ProfileIntake.externalText(): String = listOf(
+        department,
+        biography,
+        hobbies.joinToString(" "),
+        improvementArea,
+        reason,
+    ).joinToString(" ")
+
+    private fun containsCrisisSignal(text: String): Boolean =
+        CrisisFilter.check(text).isCrisisSignal
 
     private companion object {
         val NON_ID_CHARS = Regex("[^a-z0-9]+")
