@@ -22,6 +22,9 @@ class JsonEsikRepository(context: Context) : EsikRepository {
             targetPackage = profile.optString("hedef_paket"),
             dailyLimitMinutes = profile.optInt("limit_dk", DEFAULT_LIMIT_MINUTES)
                 .coerceAtLeast(1),
+            biography = profile.optString("biyografi"),
+            personalization = profile.optJSONObject("kisisellestirme").toPersonalization(),
+            schemaVersion = profile.optInt("sema_surum", 1).coerceAtLeast(1),
         )
     }
 
@@ -30,6 +33,7 @@ class JsonEsikRepository(context: Context) : EsikRepository {
         root.put(
             KEY_PROFILE,
             JSONObject()
+                .put("sema_surum", UserProfile.CURRENT_SCHEMA_VERSION)
                 .put("isim", profile.name)
                 .put("bolum", profile.department)
                 .put("hobiler", JSONArray(profile.hobbies))
@@ -37,7 +41,9 @@ class JsonEsikRepository(context: Context) : EsikRepository {
                 .put("neden", profile.reason)
                 .put("hedef_app", profile.targetAppLabel)
                 .put("hedef_paket", profile.targetPackage)
-                .put("limit_dk", profile.dailyLimitMinutes),
+                .put("limit_dk", profile.dailyLimitMinutes)
+                .put("biyografi", profile.biography)
+                .put("kisisellestirme", profile.personalization.toJson()),
         )
         ensureRecordsArray(root)
         writeRoot(root)
@@ -54,6 +60,13 @@ class JsonEsikRepository(context: Context) : EsikRepository {
                         usageMinutes = item.optInt("kullanim_dk", 0).coerceAtLeast(0),
                         text = item.optString("metin"),
                         choice = UserChoice.fromStorage(item.optString("secim")),
+                        stateId = item.optString("durum_id"),
+                        stateLabel = item.optString("durum_etiket"),
+                        inputMethod = InterventionInputMethod.fromStorage(
+                            item.optString("girdi_yontemi"),
+                        ),
+                        aiQuestion = item.optString("ai_soru"),
+                        aiAlternative = item.optString("ai_alternatif"),
                     ),
                 )
             }
@@ -114,6 +127,65 @@ class JsonEsikRepository(context: Context) : EsikRepository {
             .put("kullanim_dk", usageMinutes)
             .put("metin", text)
             .put("secim", choice.storageValue)
+            .put("durum_id", stateId)
+            .put("durum_etiket", stateLabel)
+            .put("girdi_yontemi", inputMethod.storageValue)
+            .put("ai_soru", aiQuestion)
+            .put("ai_alternatif", aiAlternative)
+
+    private fun PersonalizationProfile.toJson(): JSONObject =
+        JSONObject()
+            .put("hedefler", JSONArray(goals))
+            .put("tekrarlayan_baglamlar", JSONArray(recurringContexts))
+            .put("tercih_edilen_aktiviteler", JSONArray(preferredActivities))
+            .put("dusuk_enerji_aktiviteleri", JSONArray(lowEnergyActivities))
+            .put("ton", tone.storageValue)
+            .put(
+                "hizli_durumlar",
+                JSONArray().apply {
+                    quickStates.forEach { option ->
+                        put(
+                            JSONObject()
+                                .put("id", option.id)
+                                .put("etiket", option.label)
+                                .put("emoji", option.emoji)
+                                .put("kategori", option.category),
+                        )
+                    }
+                },
+            )
+
+    private fun JSONObject?.toPersonalization(): PersonalizationProfile {
+        if (this == null) return PersonalizationProfile()
+        return PersonalizationProfile(
+            goals = optJSONArray("hedefler").toStringList(),
+            recurringContexts = optJSONArray("tekrarlayan_baglamlar").toStringList(),
+            preferredActivities = optJSONArray("tercih_edilen_aktiviteler").toStringList(),
+            lowEnergyActivities = optJSONArray("dusuk_enerji_aktiviteleri").toStringList(),
+            quickStates = optJSONArray("hizli_durumlar").toQuickStates(),
+            tone = ProfileTone.fromStorage(optString("ton")),
+        )
+    }
+
+    private fun JSONArray?.toQuickStates(): List<QuickStateOption> {
+        if (this == null) return emptyList()
+        return buildList {
+            for (index in 0 until length()) {
+                val item = optJSONObject(index) ?: continue
+                val id = item.optString("id").trim()
+                val label = item.optString("etiket").trim()
+                if (id.isEmpty() || label.isEmpty()) continue
+                add(
+                    QuickStateOption(
+                        id = id,
+                        label = label,
+                        emoji = item.optString("emoji"),
+                        category = item.optString("kategori", id),
+                    ),
+                )
+            }
+        }
+    }
 
     private fun JSONArray?.toStringList(): List<String> {
         if (this == null) return emptyList()
