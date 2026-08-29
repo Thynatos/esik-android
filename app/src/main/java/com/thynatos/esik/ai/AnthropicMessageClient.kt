@@ -21,6 +21,7 @@ class AnthropicMessageClient(
         systemPrompt: String,
         userPrompt: String,
         maxTokens: Int,
+        disableThinking: Boolean = false,
     ): String = withContext(Dispatchers.IO) {
         check(isConfigured) { "Anthropic API key is not configured" }
         check(model.isNotBlank()) { "Anthropic model is not configured" }
@@ -48,6 +49,12 @@ class AnthropicMessageClient(
                             .put("content", userPrompt),
                     ),
                 )
+            if (disableThinking) {
+                request.put(
+                    "thinking",
+                    JSONObject().put("type", "disabled"),
+                )
+            }
 
             connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.write(request.toString())
