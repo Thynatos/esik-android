@@ -80,7 +80,7 @@ class MockAiGateway : AiGateway {
             "relaxing" -> "Bu molayı ne kadar sürdürmek istediğini baştan seçmek işine yarar mı?"
             "bored" -> "Can sıkıntısını değiştirmek için daha küçük ve belirli bir şey seçmek ister misin?"
             "waiting" -> "Beklerken ekran dışında kısa bir seçenek denemek ister misin?"
-            "habit" -> "Bu açılış bilinçli bir seçimden çok alışkanlığa benziyor olabilir mi?"
+            "habit" -> "Bu açılış bilinçli bir seçimden ziyade alışkanlığa benziyor olabilir mi?"
             else -> "Şu anda gerçekten neye ihtiyaç duyduğunu bir cümleyle ayırmak yardımcı olabilir mi?"
         }
 
@@ -129,12 +129,15 @@ class MockAiGateway : AiGateway {
             .eachCount()
             .maxByOrNull { it.value }
             ?.key
+            ?.takeIf { SafetyLanguageValidator.isDisplaySafe(it) }
 
         val observation = commonState?.let {
             "“$it” seçtiğin anlarda verdiğin kararlar arasında bir örüntü olabilir mi?"
         } ?: "Akşam saatlerindeki girişler yorgunluk veya alışkanlıkla bağlantılı olabilir mi?"
 
-        val microStep = profile.personalization.goals.firstOrNull()?.let {
+        val safeGoal = profile.personalization.goals.firstOrNull()
+            ?.takeIf { SafetyLanguageValidator.isDisplaySafe(it) }
+        val microStep = safeGoal?.let {
             "Yarın $it için telefonu açmadan önce iki dakikalık tek bir başlangıç yap."
         } ?: "Yarın ilk müdahalede telefonu iki dakika uzağa bırakıp sonra yeniden karar ver."
 
