@@ -7,9 +7,18 @@ object CooldownPolicy {
         nowMillis: Long,
         lastShownAtMillis: Long?,
         cooldownMillis: Long = DEFAULT_COOLDOWN_MILLIS,
-    ): Boolean {
-        if (lastShownAtMillis == null) return true
-        if (nowMillis < lastShownAtMillis) return true
-        return nowMillis - lastShownAtMillis >= cooldownMillis.coerceAtLeast(0L)
+    ): Boolean = remainingMillis(nowMillis, lastShownAtMillis, cooldownMillis) == 0L
+
+    fun remainingMillis(
+        nowMillis: Long,
+        lastShownAtMillis: Long?,
+        cooldownMillis: Long = DEFAULT_COOLDOWN_MILLIS,
+    ): Long {
+        if (lastShownAtMillis == null) return 0L
+        if (nowMillis < lastShownAtMillis) return 0L
+
+        val cooldown = cooldownMillis.coerceAtLeast(0L)
+        val elapsed = nowMillis - lastShownAtMillis
+        return (cooldown - elapsed).coerceAtLeast(0L)
     }
 }
