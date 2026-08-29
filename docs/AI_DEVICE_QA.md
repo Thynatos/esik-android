@@ -18,11 +18,11 @@ git pull --ff-only
 
 ## 2. Offline/fallback build
 
-Leave `ANTHROPIC_API_KEY` blank in `local.properties`.
+Leave `GEMINI_API_KEY` blank in `local.properties`.
 
 ```properties
 sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk
-ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
 ```
 
 Then run:
@@ -59,14 +59,14 @@ Reopen Eşik and re-grant Usage Access and Draw Over Other Apps.
 10. Reset the cooldown by changing the limit, then test custom text and custom voice.
 11. Load the four-day demo data and verify the report is available after seven current-day records.
 
-## 5. Live Anthropic test
+## 5. Live Gemini test
 
-Add a temporary hackathon API key only to the ignored local file:
+Add the hackathon API key only to the ignored local file:
 
 ```properties
-ANTHROPIC_API_KEY=<your-local-demo-key>
-ANTHROPIC_FAST_MODEL=claude-haiku-4-5-20251001
-ANTHROPIC_REPORT_MODEL=claude-sonnet-5
+GEMINI_API_KEY=<your-local-demo-key>
+GEMINI_FAST_MODEL=gemini-2.5-flash-lite
+GEMINI_REPORT_MODEL=gemini-2.5-flash
 ```
 
 Rebuild and reinstall. Never commit or paste the key into GitHub, chat, screenshots, or the demo recording.
@@ -75,7 +75,7 @@ Validate:
 
 - onboarding profile output changes from the deterministic fallback while preserving the JSON contract;
 - quick-state/card responses remain short and grounded in the stored profile;
-- airplane mode, timeout, malformed output, or a blank key falls back without breaking the popup;
+- airplane mode, timeout, blocked generation, malformed output, or a blank key falls back without breaking the popup;
 - daily report numbers remain locally computed;
 - no diagnostic, judgmental, threshold-setting, or causal wording appears.
 
@@ -92,15 +92,15 @@ Use the internal test phrases maintained by the team; do not display them in dem
 
 Expected behavior:
 
-- onboarding shows the local support message and does not call Anthropic;
-- custom intervention text shows the support route and is not sent to Anthropic;
+- onboarding shows the local support message and does not call Gemini;
+- custom intervention text shows the support route and is not sent to Gemini;
 - crisis-signalling historical/profile context causes the report/card to use local fallback;
 - unsafe generated output is discarded and replaced by the deterministic safe result.
 
 ## 8. Privacy statement to verify in the UI
 
 - Account and intervention history are stored on the device.
-- When live AI is configured, relevant text is sent to the Anthropic API for generation.
+- When live AI is configured, relevant text is sent to the Gemini API for generation.
 - Speech-to-text is handled by the phone's configured speech-recognition service and may not be fully on-device.
 - The direct mobile API key is hackathon-only; production requires a backend proxy with server-held credentials, abuse controls, and an explicit retention/logging policy.
 
