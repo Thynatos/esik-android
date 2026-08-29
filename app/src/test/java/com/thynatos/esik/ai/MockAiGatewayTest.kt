@@ -37,10 +37,16 @@ class MockAiGatewayTest {
             ),
         )
 
-        assertEquals(6, result.quickStates.size)
-        assertTrue(result.recurringContexts.contains("yorgunluk"))
-        assertTrue(result.recurringContexts.contains("erteleme"))
-        assertTrue(result.preferredActivities.contains("gitar"))
+        assertEquals("six quick states", 6, result.quickStates.size)
+        assertTrue(
+            "yoruluyorum should map to yorgunluk",
+            result.recurringContexts.contains("yorgunluk"),
+        )
+        assertTrue(
+            "başlamak yerine oyalanıyorum should map to erteleme",
+            result.recurringContexts.contains("erteleme"),
+        )
+        assertTrue("explicit hobby should be retained", result.preferredActivities.contains("gitar"))
     }
 
     @Test
