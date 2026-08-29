@@ -21,10 +21,30 @@ import com.thynatos.esik.ai.CrisisFilter
 import com.thynatos.esik.ai.MockAiGateway
 import com.thynatos.esik.ai.SafetyLanguageValidator
 import com.thynatos.esik.data.DemoDataSeeder
+import com.thynatos.esik.data.InterventionInput
+import com.thynatos.esik.data.InterventionInputMethod
+import com.thynatos.esik.data.ProfileIntake
 import com.thynatos.esik.data.UserProfile
 import com.thynatos.esik.usage.CooldownPolicy
 import java.time.LocalDate
 import java.time.LocalDateTime
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.startCoroutine
+
+fun <T> runSuspend(block: suspend () -> T): T {
+    var completed: Result<T>? = null
+    block.startCoroutine(
+        object : Continuation<T> {
+            override val context = EmptyCoroutineContext
+            override fun resumeWith(result: Result<T>) {
+                completed = result
+            }
+        },
+    )
+    return checkNotNull(completed) { "Lightweight check only supports immediately completed suspend functions" }
+        .getOrThrow()
+}
 
 fun main() {
     check(CrisisFilter.check("Kendimi öldürmek istiyorum.").isCrisisSignal)
@@ -44,24 +64,51 @@ fun main() {
     check(records.map { it.localDate() }.distinct().size == 4)
     check(records.count { it.occursOn(LocalDate.of(2026, 8, 29)) } == 8)
     check(records.all { it.timestampEpochMillis <= fixedNow.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() })
+    check(records.any { it.stateId.isNotBlank() && it.aiAlternative.isNotBlank() })
+
+    val gateway = MockAiGateway()
+    val personalization = runSuspend {
+        gateway.generateProfile(
+            ProfileIntake(
+                name = "Ayşe",
+                biography = "Derslerden sonra yoruluyorum ve çalışmaya başlamak yerine oyalanıyorum.",
+                hobbies = listOf("gitar"),
+                improvementArea = "daha düzenli çalışmak",
+                reason = "gece daha rahat uyumak",
+            ),
+        )
+    }
+    check(personalization.quickStates.size == 6)
 
     val profile = UserProfile(
         name = "Ayşe",
         department = "İstatistik",
         hobbies = listOf("gitar"),
-        improvementArea = "İngilizce",
-        reason = "gece uyuyamıyorum",
+        improvementArea = "daha düzenli çalışmak",
+        reason = "gece daha rahat uyumak",
         targetAppLabel = "Instagram",
         targetPackage = "com.instagram.android",
         dailyLimitMinutes = 60,
+        biography = "Derslerden sonra yoruluyorum.",
+        personalization = personalization,
     )
-    val gateway = MockAiGateway()
-    check(gateway.generateDailyReport(profile, records.take(6), 78).insufficientData)
-    val report = gateway.generateDailyReport(profile, records.take(7), 78)
+    check(runSuspend { gateway.generateDailyReport(profile, records.take(6), 78) }.insufficientData)
+    val report = runSuspend { gateway.generateDailyReport(profile, records.take(7), 78) }
     check(!report.insufficientData)
     check(SafetyLanguageValidator.isDisplaySafe(report.observationQuestion, report.microStep))
 
-    val card = gateway.generateCard(profile, 78, "bugün yoruldum")
+    val card = runSuspend {
+        gateway.generateCard(
+            profile = profile,
+            currentUsageMinutes = 78,
+            input = InterventionInput(
+                text = "Biraz yoruldum",
+                stateId = "tired",
+                stateLabel = "Biraz yoruldum",
+                method = InterventionInputMethod.QUICK_REPLY,
+            ),
+        )
+    }
     check(SafetyLanguageValidator.isDisplaySafe(card.question, card.alternative))
 
     println("Pure Kotlin verification passed.")
