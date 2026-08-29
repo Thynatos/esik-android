@@ -18,7 +18,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.thynatos.esik.MainActivity
 import com.thynatos.esik.R
-import com.thynatos.esik.ai.AnthropicAiGateway
+import com.thynatos.esik.ai.GeminiAiGateway
 import com.thynatos.esik.data.JsonEsikRepository
 import com.thynatos.esik.overlay.OverlayController
 import com.thynatos.esik.usage.CooldownPolicy
@@ -42,7 +42,7 @@ class UsageMonitorService : Service() {
         isDebuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         repository = JsonEsikRepository(this)
         usageStatsReader = UsageStatsReader(this)
-        overlayController = OverlayController(this, repository, AnthropicAiGateway())
+        overlayController = OverlayController(this, repository, GeminiAiGateway())
         executor = Executors.newSingleThreadScheduledExecutor()
         setMonitoringEnabled(true)
         promoteToForeground()
