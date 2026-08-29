@@ -1,7 +1,27 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use(::load)
+}
+
+fun String.asBuildConfigString(): String =
+    "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+val anthropicApiKey = localProperties.getProperty("ANTHROPIC_API_KEY", "")
+val anthropicFastModel = localProperties.getProperty(
+    "ANTHROPIC_FAST_MODEL",
+    "claude-haiku-4-5-20251001",
+)
+val anthropicReportModel = localProperties.getProperty(
+    "ANTHROPIC_REPORT_MODEL",
+    "claude-sonnet-5",
+)
 
 android {
     namespace = "com.thynatos.esik"
@@ -15,6 +35,9 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "ANTHROPIC_API_KEY", anthropicApiKey.asBuildConfigString())
+        buildConfigField("String", "ANTHROPIC_FAST_MODEL", anthropicFastModel.asBuildConfigString())
+        buildConfigField("String", "ANTHROPIC_REPORT_MODEL", anthropicReportModel.asBuildConfigString())
     }
 
     buildTypes {
@@ -29,6 +52,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
