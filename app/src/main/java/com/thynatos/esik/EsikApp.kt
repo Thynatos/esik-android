@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +32,7 @@ import com.thynatos.esik.ui.InterventionScreen
 import com.thynatos.esik.ui.OnboardingScreen
 import com.thynatos.esik.usage.UsageStatsReader
 import java.time.LocalDate
+import kotlinx.coroutines.launch
 
 private enum class AppScreen {
     ONBOARDING,
@@ -46,6 +48,7 @@ fun EsikApp(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     val usageReader = remember(context) { UsageStatsReader(context) }
     val installedApps = remember(context) { InstalledAppLoader.load(context) }
 
@@ -104,6 +107,7 @@ fun EsikApp(
             installedApps = installedApps,
             hasUsageAccess = hasUsageAccess,
             canDrawOverlays = canDrawOverlays,
+            aiGateway = aiGateway,
             onOpenUsagePermission = {
                 PermissionNavigator.openUsageAccessSettings(context)
             },
@@ -169,12 +173,14 @@ fun EsikApp(
                     val today = LocalDate.now()
                     val todayRecords = allRecords.filter { it.occursOn(today) }
                     records = allRecords
-                    report = aiGateway.generateDailyReport(
-                        profile = activeProfile,
-                        records = todayRecords,
-                        currentUsageMinutes = currentUsageMinutes,
-                    )
-                    screen = AppScreen.REPORT
+                    scope.launch {
+                        report = aiGateway.generateDailyReport(
+                            profile = activeProfile,
+                            records = todayRecords,
+                            currentUsageMinutes = currentUsageMinutes,
+                        )
+                        screen = AppScreen.REPORT
+                    }
                 },
                 onLoadDemoData = {
                     val seeded = DemoDataSeeder.records()
@@ -204,12 +210,17 @@ fun EsikApp(
                 profile = activeProfile,
                 usageMinutes = interventionUsageMinutes,
                 aiGateway = aiGateway,
-                onChoice = { text, choice ->
+                onChoice = { input, card, choice ->
                     val record = InterventionRecord(
                         timestampEpochMillis = System.currentTimeMillis(),
                         usageMinutes = interventionUsageMinutes,
-                        text = text,
+                        text = input.text,
                         choice = choice,
+                        stateId = input.stateId,
+                        stateLabel = input.stateLabel,
+                        inputMethod = input.method,
+                        aiQuestion = card.question,
+                        aiAlternative = card.alternative,
                     )
                     repository.appendRecord(record)
                     records = records + record
