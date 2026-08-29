@@ -53,7 +53,9 @@ fun EsikApp(
     var records by remember { mutableStateOf(repository.loadRecords()) }
     var currentUsageMinutes by remember { mutableIntStateOf(0) }
     var interventionUsageMinutes by remember { mutableIntStateOf(0) }
-    var monitoringStarted by rememberSaveable { mutableStateOf(false) }
+    var monitoringStarted by rememberSaveable {
+        mutableStateOf(UsageMonitorService.isMonitoringEnabled(context))
+    }
     var permissionRefreshNonce by remember { mutableIntStateOf(0) }
     var report by remember { mutableStateOf<DailyReport?>(null) }
     var screen by rememberSaveable {
@@ -64,6 +66,7 @@ fun EsikApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 permissionRefreshNonce++
+                monitoringStarted = UsageMonitorService.isMonitoringEnabled(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
