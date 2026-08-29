@@ -15,14 +15,17 @@ val localProperties = Properties().apply {
 fun String.asBuildConfigString(): String =
     "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
-val anthropicApiKey = localProperties.getProperty("ANTHROPIC_API_KEY", "")
-val anthropicFastModel = localProperties.getProperty(
-    "ANTHROPIC_FAST_MODEL",
-    "claude-haiku-4-5-20251001",
+val geminiApiKey = localProperties.getProperty(
+    "GEMINI_API_KEY",
+    localProperties.getProperty("GOOGLE_API_KEY", ""),
 )
-val anthropicReportModel = localProperties.getProperty(
-    "ANTHROPIC_REPORT_MODEL",
-    "claude-sonnet-5",
+val geminiFastModel = localProperties.getProperty(
+    "GEMINI_FAST_MODEL",
+    "gemini-2.5-flash-lite",
+)
+val geminiReportModel = localProperties.getProperty(
+    "GEMINI_REPORT_MODEL",
+    "gemini-2.5-flash",
 )
 
 android {
@@ -37,9 +40,9 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "ANTHROPIC_API_KEY", anthropicApiKey.asBuildConfigString())
-        buildConfigField("String", "ANTHROPIC_FAST_MODEL", anthropicFastModel.asBuildConfigString())
-        buildConfigField("String", "ANTHROPIC_REPORT_MODEL", anthropicReportModel.asBuildConfigString())
+        buildConfigField("String", "GEMINI_API_KEY", geminiApiKey.asBuildConfigString())
+        buildConfigField("String", "GEMINI_FAST_MODEL", geminiFastModel.asBuildConfigString())
+        buildConfigField("String", "GEMINI_REPORT_MODEL", geminiReportModel.asBuildConfigString())
     }
 
     buildTypes {
