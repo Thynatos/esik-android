@@ -126,7 +126,7 @@ fun OnboardingScreen(
             }
             generatedProfile = generated
             isGeneratingProfile = false
-            profileMessage = "Profil özeti hazır. Bu bilgiler yalnızca cihazında saklanır."
+            profileMessage = "Profil özeti cihazında saklanır. Canlı AI açıksa üretim sırasında anlatım metni Anthropic API'ye gönderilir."
             onReady(generated)
         }
     }
@@ -140,7 +140,7 @@ fun OnboardingScreen(
     ) {
         Text("Eşik", style = MaterialTheme.typography.headlineLarge)
         Text(
-            "Hesap yok. Şifre yok. Anlattıkların ve oluşturulan profil bu cihazda kalır.",
+            "Hesap yok. Kayıtlar cihazında tutulur. Canlı AI açıksa ilgili metin Anthropic API'ye; sesli giriş ise telefonundaki konuşma tanıma hizmetine gönderilebilir.",
             style = MaterialTheme.typography.bodyMedium,
         )
 
@@ -339,7 +339,7 @@ fun OnboardingScreen(
                                 reason = finalReason,
                                 targetAppLabel = targetAppLabel,
                                 targetPackage = targetPackage,
-                                dailyLimitMinutes = limit ?: 60,
+                                dailyLimitMinutes = requireNotNull(limit),
                                 biography = biography.trim(),
                                 personalization = personalization,
                             ),
