@@ -66,7 +66,11 @@ fun EsikApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 permissionRefreshNonce++
-                monitoringStarted = UsageMonitorService.isMonitoringEnabled(context)
+                val monitoringEnabled = UsageMonitorService.isMonitoringEnabled(context)
+                monitoringStarted = monitoringEnabled
+                if (monitoringEnabled) {
+                    UsageMonitorService.start(context)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
