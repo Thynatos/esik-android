@@ -71,9 +71,9 @@ class OverlayController(
         }
         scroll.addView(
             card,
-            ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
             ).apply { gravity = Gravity.CENTER },
         )
         root.addView(
@@ -142,7 +142,6 @@ class OverlayController(
             customInputMethod = method
             input.visibility = View.VISIBLE
             submit.visibility = View.VISIBLE
-            status.visibility = View.GONE
             resultContainer.visibility = View.GONE
             if (method == InterventionInputMethod.TEXT) {
                 input.requestFocus()
@@ -256,7 +255,7 @@ class OverlayController(
                 text = listOf(option.emoji, option.label)
                     .filter(String::isNotBlank)
                     .joinToString(" ")
-                isAllCaps = false
+                setAllCaps(false)
                 setOnClickListener {
                     requestCard(
                         InterventionInput(
@@ -272,14 +271,17 @@ class OverlayController(
 
         customActions.addView(Button(appContext).apply {
             text = "✏️ Yaz"
-            isAllCaps = false
-            setOnClickListener { showCustomInput(InterventionInputMethod.TEXT) }
+            setAllCaps(false)
+            setOnClickListener {
+                status.visibility = View.GONE
+                showCustomInput(InterventionInputMethod.TEXT)
+            }
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginEnd = 6.dp
         })
         customActions.addView(Button(appContext).apply {
             text = "🎙 Anlat"
-            isAllCaps = false
+            setAllCaps(false)
             setOnClickListener {
                 hideKeyboard(input)
                 root.visibility = View.GONE
@@ -290,23 +292,24 @@ class OverlayController(
                     if (overlayView !== root) return@request
                     root.visibility = View.VISIBLE
                     if (spokenText.isNullOrBlank()) {
+                        showCustomInput(InterventionInputMethod.TEXT)
                         status.apply {
                             visibility = View.VISIBLE
                             text = "Sesli yanıt alınamadı; yazarak devam edebilirsin."
                         }
-                        showCustomInput(InterventionInputMethod.TEXT)
                     } else {
                         input.setText(spokenText)
+                        status.visibility = View.GONE
                         showCustomInput(InterventionInputMethod.VOICE)
                     }
                 }
                 if (!started) {
                     root.visibility = View.VISIBLE
+                    showCustomInput(InterventionInputMethod.TEXT)
                     status.apply {
                         visibility = View.VISIBLE
                         text = "Bu telefonda sesli giriş kullanılamıyor; yazarak devam edebilirsin."
                     }
-                    showCustomInput(InterventionInputMethod.TEXT)
                 }
             }
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
