@@ -93,16 +93,15 @@ screens/
 components/
 ```
 
-B must build against interfaces/mocks and must not wait for the real Anthropic API or Android service implementation.
+B must build against interfaces/mocks and must not wait for the real Gemini API or Android service implementation.
 
 ### C — AI & Safety — `work/ai`
 
 Responsibilities:
 
 - Provide a fixed-JSON/mock AI implementation in the first 30 minutes
-- Intervention-card prompt
-- Daily-report prompt
-- Anthropic HTTP integration for the hackathon prototype
+- Profile, intervention-card, and daily-report prompts
+- Gemini REST integration for the hackathon prototype
 - Strict JSON parsing
 - Timeout/error handling and deterministic fallback output
 - Crisis-language gate before any AI call
@@ -155,7 +154,7 @@ D owns coordination for high-conflict shared files such as `EsikApp.kt`, navigat
 ## Critical dependency rules
 
 1. **Freeze the data model first.** D publishes the approved contract Saturday morning before parallel implementation drifts.
-2. **Mock AI first.** C ships a fixed-JSON implementation in the first 30 minutes, so UI/integration never waits for Anthropic.
+2. **Mock AI first.** C ships a fixed-JSON implementation in the first 30 minutes, so UI/integration never waits for Gemini.
 3. **Physical overlay checkpoint at noon.** A validates the highest-risk Android behavior on the actual demo phone.
 4. **One owner per file.** Coordinate edits to shared files before touching them.
 5. **Keep `main` green/demoable.** Merge only reviewable, working increments.
@@ -184,31 +183,51 @@ If the noon checkpoint fails, A keeps working on it. B, C, and D continue using 
 
 Never arrive at the demo with an empty report screen. D should maintain seeded data across 3–4 days, with enough current-day records for the report.
 
+## Current feature-branch implementation
+
+The `feature/ai-personalization` branch currently includes:
+
+- narrative-first onboarding through voice or editable text;
+- AI-generated structured profile with goals, contexts, preferred activities, low-energy alternatives, tone, and six quick states;
+- three instant profile-aware replies in both the Compose intervention and real system overlay;
+- custom text and voice input;
+- enriched intervention records and cautious daily synthesis;
+- a timeout-bounded Gemini `generateContent` REST client;
+- deterministic offline fallback for blank key, airplane mode, quota/error, blocked generation, malformed JSON, and unsafe output;
+- backward-compatible schema-v1 reads;
+- Android CI for unit tests and debug APK assembly.
+
+See:
+
+- `docs/AI_PERSONALIZATION_IMPLEMENTATION.md`
+- `docs/AI_DEVICE_QA.md`
+- `docs/DATA_SCHEMA.md`
+
 ## What is already scaffolded
 
 - Four Jetpack Compose screens and an in-app debug flow
 - Installed launchable-app picker
 - Device-local JSON persistence in `filesDir/esik_state.json`
-- Deterministic mock card and report generation
+- Deterministic mock profile, card, and report generation
 - Local crisis-language gate that runs before AI
 - Banned-language output validator with fallback
 - 15-minute cooldown policy
 - `UsageStatsManager` permission checks and daily usage reads
 - User-started foreground service polling every 60 seconds
-- Basic `TYPE_APPLICATION_OVERLAY` intervention window
+- `TYPE_APPLICATION_OVERLAY` intervention window
 - Four-day demo data with enough records today to show a report
-- Unit tests for cooldown, crisis filtering, output language, report eligibility, and date grouping
+- Unit tests for cooldown, crisis filtering, output language, report eligibility, date grouping, and AI fallback
 - Copilot context in `.github/copilot-instructions.md`, `AGENTS.md`, `COPILOT_PROMPT.md`, and the reusable `/esik-build` prompt file
 
-## What the team still needs to finish
+## What still requires physical-device validation
 
-- Validate Usage Access, foreground-app detection, and overlays on the actual demo phone
-- Improve overlay lifecycle, keyboard, back-button, and OEM/battery behavior
-- Replace the placeholder Anthropic gateway with a timeout-bounded HTTP client and strict JSON parsing
-- Keep the mock/fallback path working even after real AI is connected
-- Add asynchronous state/loading/error handling around real network calls
-- Verify local-midnight behavior and daily report record selection
-- Polish Turkish copy and prepare the final report, ethics section, demo rehearsal, and backup video
+- Live Gemini profile/card/report calls using the local demo key
+- Voice cancellation and recognizer-unavailable fallback
+- Voice from the real overlay and late-result handling
+- Airplane-mode fallback after a live build
+- Crisis short-circuit
+- Existing-profile migration and complete data deletion
+- Lock-screen, battery/OEM, and long-running service behavior
 
 ## First setup
 
@@ -232,11 +251,20 @@ Then:
 
 1. Install Android Studio, Android SDK Platform 37, and JDK 17.
 2. Copy `local.properties.example` to `local.properties` and set `sdk.dir` if Android Studio does not create it.
-3. Open the repository in Android Studio and sync Gradle.
-4. Run on a physical Android phone.
-5. Grant **Usage Access** and **Draw over other apps** from the app’s guided Settings buttons.
-6. Use **4 günlük demo verisi yükle** and **Kart ekranını test et** before the system trigger is ready.
-7. Give Copilot Agent Mode the contents of `COPILOT_PROMPT.md`, or invoke `/esik-build` in an IDE that supports repository prompt files.
+3. Add `GEMINI_API_KEY` to `local.properties` only for the live hackathon test.
+4. Open the repository in Android Studio and sync Gradle.
+5. Run on a physical Android phone.
+6. Grant **Usage Access** and **Draw over other apps** from the app’s guided Settings buttons.
+7. Use **4 günlük demo verisi yükle** and **Kart ekranını test et** while validating the system trigger.
+
+Example local configuration:
+
+```properties
+sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk
+GEMINI_API_KEY=<your-local-demo-key>
+GEMINI_FAST_MODEL=gemini-2.5-flash-lite
+GEMINI_REPORT_MODEL=gemini-2.5-flash
+```
 
 ## Build and test
 
@@ -245,10 +273,10 @@ Then:
 ./gradlew assembleDebug
 ```
 
-A physical phone is required to validate UsageStats accuracy, target-app detection, foreground-service behavior, overlays, lock-screen behavior, and OEM battery restrictions. See `docs/VALIDATION.md` for the validation boundary.
+A physical phone is required to validate UsageStats accuracy, target-app detection, foreground-service behavior, overlays, voice, lock-screen behavior, and OEM battery restrictions. See `docs/VALIDATION.md` and `docs/AI_DEVICE_QA.md`.
 
 ## Secret handling
 
-Never commit an Anthropic API key. A mobile-direct Anthropic request may be used only for the hackathon demo. A production version needs a backend proxy, server-held or short-lived credentials, abuse controls, and an explicit logging/redaction policy.
+Never commit a Gemini API key. A mobile-direct Gemini request may be used only for the hackathon demo. The ignored local key is still embedded in the resulting APK and can be extracted; a production version therefore needs a backend proxy, server-held or short-lived credentials, abuse controls, and an explicit logging/redaction policy.
 
-See `docs/TEAM_PLAN.md`, `docs/IMPLEMENTATION_HANDOFF.md`, and `docs/VALIDATION.md` for deeper project guidance.
+See `docs/TEAM_PLAN.md`, `docs/AI_PERSONALIZATION_IMPLEMENTATION.md`, and `docs/VALIDATION.md` for deeper project guidance.
