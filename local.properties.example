@@ -2,5 +2,11 @@
 # Never commit local.properties.
 sdk.dir=/absolute/path/to/Android/Sdk
 
-# Hackathon-only option. Do not ship an Anthropic API key inside a production APK.
-# ANTHROPIC_API_KEY=replace_me
+# Hackathon-only direct mobile integration.
+# Never commit a real key and never ship this architecture to production.
+# Production requires a backend proxy with server-held credentials and abuse controls.
+ANTHROPIC_API_KEY=
+
+# Optional model overrides. The app falls back locally if a model is unavailable.
+ANTHROPIC_FAST_MODEL=claude-haiku-4-5-20251001
+ANTHROPIC_REPORT_MODEL=claude-sonnet-5
