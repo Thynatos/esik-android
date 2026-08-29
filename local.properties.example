@@ -1,0 +1,6 @@
+# Copy this file to local.properties and set your Android SDK path.
+# Never commit local.properties.
+sdk.dir=/absolute/path/to/Android/Sdk
+
+# Hackathon-only option. Do not ship an Anthropic API key inside a production APK.
+# ANTHROPIC_API_KEY=replace_me
