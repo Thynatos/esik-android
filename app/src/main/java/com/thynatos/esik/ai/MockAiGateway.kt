@@ -29,7 +29,18 @@ class MockAiGateway : AiGateway {
 
         val contexts = buildList {
             if (combined.containsAny("yorgun", "bitkin", "enerjim yok", "tired")) add("yorgunluk")
-            if (combined.containsAny("ertel", "procrast", "başlayam", "odaklan")) add("erteleme")
+            if (
+                combined.containsAny(
+                    "ertel",
+                    "procrast",
+                    "başlayam",
+                    "başlamak yerine",
+                    "oyalan",
+                    "odaklan",
+                )
+            ) {
+                add("erteleme")
+            }
             if (combined.containsAny("sıkıl", "bored", "boş kald")) add("sıkılma")
             if (combined.containsAny("rahatla", "dinlen", "kafa dağıt", "relax")) add("dinlenme")
             if (combined.containsAny("uyku", "gece", "uyuyam")) add("gece kullanımı")
@@ -156,7 +167,7 @@ class MockAiGateway : AiGateway {
         val normalized = text.lowercase()
         return when {
             normalized.containsAny("yorgun", "bitkin", "tired") -> "tired"
-            normalized.containsAny("ertel", "başlayam", "procrast") -> "procrastinating"
+            normalized.containsAny("ertel", "başlayam", "başlamak yerine", "oyalan", "procrast") -> "procrastinating"
             normalized.containsAny("dinlen", "rahatla", "kafa dağıt") -> "relaxing"
             normalized.containsAny("sıkıl", "bored") -> "bored"
             normalized.containsAny("bekli", "waiting") -> "waiting"
