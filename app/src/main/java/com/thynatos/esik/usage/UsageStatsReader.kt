@@ -72,4 +72,71 @@ class UsageStatsReader(context: Context) {
         }
         return latestPackage
     }
+
+    /**
+     * Reads recent event shape only for contextualizing an already-eligible threshold intervention.
+     * It does not create an intervention by itself and requires no permission beyond Usage Access.
+     */
+    fun recentEvents(
+        nowMillis: Long = System.currentTimeMillis(),
+        windowMillis: Long = DEFAULT_PATTERN_WINDOW_MILLIS,
+    ): List<UsageEventSample> {
+        if (!hasUsageAccess()) return emptyList()
+        val events = usageStatsManager.queryEvents(nowMillis - windowMillis, nowMillis)
+        val event = UsageEvents.Event()
+        val samples = mutableListOf<UsageEventSample>()
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val type = sampleTypeOf(event.eventType) ?: continue
+            samples += UsageEventSample(
+                packageName = event.packageName.orEmpty(),
+                timestampMillis = event.timeStamp,
+                type = type,
+            )
+        }
+        return samples
+    }
+
+    fun patternSnapshot(
+        targetPackage: String,
+        nowMillis: Long = System.currentTimeMillis(),
+        windowMillis: Long = DEFAULT_PATTERN_WINDOW_MILLIS,
+    ): UsagePatternSnapshot = UsageSessionAnalyzer.analyze(
+        events = recentEvents(nowMillis, windowMillis),
+        targetPackage = targetPackage,
+        nowMillis = nowMillis,
+    )
+
+    private fun sampleTypeOf(eventType: Int): UsageEventType? = when {
+        eventType == foregroundEventType -> UsageEventType.FOREGROUND
+        eventType == backgroundEventType -> UsageEventType.BACKGROUND
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+            (
+                eventType == UsageEvents.Event.SCREEN_NON_INTERACTIVE ||
+                    eventType == UsageEvents.Event.KEYGUARD_SHOWN
+                ) -> UsageEventType.SCREEN_OFF
+
+        else -> null
+    }
+
+    private val foregroundEventType: Int
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            UsageEvents.Event.ACTIVITY_RESUMED
+        } else {
+            @Suppress("DEPRECATION")
+            UsageEvents.Event.MOVE_TO_FOREGROUND
+        }
+
+    private val backgroundEventType: Int
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            UsageEvents.Event.ACTIVITY_PAUSED
+        } else {
+            @Suppress("DEPRECATION")
+            UsageEvents.Event.MOVE_TO_BACKGROUND
+        }
+
+    companion object {
+        const val DEFAULT_PATTERN_WINDOW_MILLIS: Long = 2L * 60L * 60L * 1_000L
+    }
 }
