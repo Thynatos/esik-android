@@ -6,9 +6,15 @@ import org.junit.Test
 
 class SafetyLanguageValidatorTest {
     @Test
-    fun blocksStandaloneJudgmentWords() {
+    fun blocksJudgmentalUsagePhrases() {
         assertFalse(SafetyLanguageValidator.isDisplaySafe("Bugün çok kullandın."))
         assertFalse(SafetyLanguageValidator.isDisplaySafe("Bu kullanım fazla olabilir."))
+        assertFalse(SafetyLanguageValidator.isDisplaySafe("Gereğinden çok ekrana baktın."))
+    }
+
+    @Test
+    fun allowsBenignCokInsideUserGoal() {
+        assertTrue(SafetyLanguageValidator.isDisplaySafe("Daha çok kitap okumak"))
     }
 
     @Test
