@@ -70,7 +70,7 @@ class OverlayController(
             isFocusable = true
         }
         val scroll = ScrollView(appContext).apply {
-            isFillViewport = true
+            isFillViewport = false
             clipToPadding = false
             setPadding(18.dp, 28.dp, 18.dp, 28.dp)
         }

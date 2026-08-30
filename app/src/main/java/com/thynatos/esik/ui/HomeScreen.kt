@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -65,6 +66,7 @@ fun HomeScreen(
         (usageMinutes.toFloat() / profile.dailyLimitMinutes.toFloat()).coerceIn(0f, 1f)
     }
     val permissionsReady = hasUsageAccess && canDrawOverlays
+    val compactLayout = LocalConfiguration.current.screenWidthDp < 360
 
     EsikScreen {
         Column(
@@ -148,13 +150,8 @@ fun HomeScreen(
 
             EsikCard {
                 Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(EsikSpacing.large),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    if (compactLayout) {
                         Column(
-                            modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall),
                         ) {
                             Text("Günün yansıması", style = MaterialTheme.typography.titleLarge)
@@ -165,6 +162,25 @@ fun HomeScreen(
                             )
                         }
                         StatItem(value = recordCount.toString(), label = "cihazdaki kayıt")
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(EsikSpacing.large),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall),
+                            ) {
+                                Text("Günün yansıması", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "Yerel kayıtlarına ve bugünkü sayılara birlikte bak.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            StatItem(value = recordCount.toString(), label = "cihazdaki kayıt")
+                        }
                     }
                     PrimaryActionButton(text = "Günlük raporu aç", onClick = onOpenReport)
                 }
