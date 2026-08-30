@@ -1,7 +1,5 @@
 package com.thynatos.esik.ai
 
-import com.thynatos.esik.usage.InterventionTrigger
-import com.thynatos.esik.usage.NeedSignals
 import com.thynatos.esik.usage.UsagePatternSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -10,119 +8,94 @@ import org.junit.Test
 
 class NeedInferenceTest {
     @Test
-    fun oneSupportingSignalIsNotEnoughToGuess() {
-        val hypothesis = NeedInference.infer(
-            signals(hourOfDay = 15, continuousActivityMillis = minutes(95)),
+    fun ordinaryMomentProducesNoGuess() {
+        assertNull(
+            NeedInference.infer(
+                pattern = pattern(currentSessionMillis = minutes(4)),
+                hourOfDay = 14,
+            ),
         )
-
-        assertNull("a single signal must fall back to asking", hypothesis)
     }
 
     @Test
-    fun aVeryLongUnbrokenRunReadsAsFatigue() {
-        val hypothesis = NeedInference.infer(
-            signals(hourOfDay = 16, continuousActivityMillis = minutes(160)),
+    fun lateHourAloneIsNotEnough() {
+        assertNull(
+            NeedInference.infer(
+                pattern = pattern(continuousActivityMillis = minutes(10)),
+                hourOfDay = 1,
+            ),
         )
-
-        assertEquals(NeedInference.STATE_TIRED, hypothesis?.stateId)
-        assertTrue(hypothesis!!.confidence >= NeedInference.MIN_CONFIDENCE)
     }
 
     @Test
-    fun lateHourWhileChargingReadsAsBedtimeUse() {
+    fun sustainedLateNightUseOffersLateNightHypothesis() {
         val hypothesis = NeedInference.infer(
-            signals(hourOfDay = 1, isCharging = true),
+            pattern = pattern(continuousActivityMillis = minutes(55)),
+            hourOfDay = 1,
         )
 
         assertEquals(NeedInference.STATE_LATE_NIGHT, hypothesis?.stateId)
-        assertTrue(hypothesis!!.reasons.contains("charging_at_night"))
+        assertTrue(hypothesis!!.reasons.contains("late_hour"))
+        assertTrue(hypothesis.reasons.contains("long_continuous_use"))
     }
 
     @Test
-    fun reopeningRepeatedlyReadsAsHabit() {
+    fun repeatedFastReopensOfferHabitHypothesis() {
         val hypothesis = NeedInference.infer(
-            signals(
-                hourOfDay = 15,
-                trigger = InterventionTrigger.IMMEDIATE_REOPEN,
+            pattern = pattern(
                 targetOpenCount = 4,
+                lastGapMillis = 20_000L,
             ),
+            hourOfDay = 15,
         )
 
         assertEquals(NeedInference.STATE_HABIT, hypothesis?.stateId)
         assertTrue(hypothesis!!.reasons.contains("reopened_within_seconds"))
+        assertTrue(hypothesis.reasons.contains("several_opens_in_short_window"))
     }
 
     @Test
-    fun aSessionFarLongerThanUsualReadsAsBoredom() {
+    fun repeatedVeryShortSessionsCanSupportHabitWithoutFastLastGap() {
         val hypothesis = NeedInference.infer(
-            signals(
+            pattern = pattern(
+                targetOpenCount = 3,
+                medianSessionMillis = 30_000L,
+                lastGapMillis = 2 * 60_000L,
+            ),
+            hourOfDay = 15,
+        )
+
+        assertEquals(NeedInference.STATE_HABIT, hypothesis?.stateId)
+    }
+
+    @Test
+    fun longSessionDoesNotInferBoredomOrFatigue() {
+        assertNull(
+            NeedInference.infer(
+                pattern = pattern(
+                    currentSessionMillis = minutes(45),
+                    continuousActivityMillis = minutes(40),
+                ),
                 hourOfDay = 15,
-                trigger = InterventionTrigger.SESSION_DRIFT,
-                currentSessionMillis = minutes(25),
-                medianSessionMillis = minutes(5),
             ),
         )
-
-        assertEquals(NeedInference.STATE_BORED, hypothesis?.stateId)
     }
 
-    @Test
-    fun theMoreSpecificNightPatternWinsOverPlainFatigue() {
-        val hypothesis = NeedInference.infer(
-            signals(
-                hourOfDay = 2,
-                isCharging = true,
-                continuousActivityMillis = minutes(160),
-            ),
-        )
-
-        assertEquals(NeedInference.STATE_LATE_NIGHT, hypothesis?.stateId)
-    }
-
-    @Test
-    fun anOrdinaryMomentProducesNoGuessAtAll() {
-        val hypothesis = NeedInference.infer(
-            signals(hourOfDay = 14, currentSessionMillis = minutes(4)),
-        )
-
-        assertNull(hypothesis)
-    }
-
-    @Test
-    fun everyGuessCarriesTheEvidenceThatProducedIt() {
-        val hypothesis = NeedInference.infer(
-            signals(hourOfDay = 1, isCharging = true),
-        )
-
-        assertTrue(hypothesis!!.reasons.isNotEmpty())
-        assertEquals(hypothesis.reasons.size, hypothesis.confidence)
-        assertTrue(hypothesis.defaultLabel.isNotBlank())
-    }
-
-    private fun signals(
-        hourOfDay: Int,
-        trigger: InterventionTrigger = InterventionTrigger.THRESHOLD,
-        isCharging: Boolean = false,
+    private fun pattern(
         targetOpenCount: Int = 1,
         currentSessionMillis: Long = 0L,
         medianSessionMillis: Long = 0L,
+        lastGapMillis: Long = UsagePatternSnapshot.UNKNOWN_GAP,
         continuousActivityMillis: Long = 0L,
-    ): NeedSignals = NeedSignals.of(
-        pattern = UsagePatternSnapshot(
-            targetOpenCount = targetOpenCount,
-            isTargetForeground = true,
-            currentSessionMillis = currentSessionMillis,
-            completedSessionCount = 0,
-            medianSessionMillis = medianSessionMillis,
-            lastGapMillis = UsagePatternSnapshot.UNKNOWN_GAP,
-            previousPackage = "",
-            continuousActivityMillis = continuousActivityMillis,
-        ),
-        trigger = trigger,
-        hourOfDay = hourOfDay,
-        isCharging = isCharging,
-        usageMinutes = 40,
-        dailyLimitMinutes = 60,
+    ): UsagePatternSnapshot = UsagePatternSnapshot(
+        targetOpenCount = targetOpenCount,
+        isTargetForeground = true,
+        currentSessionMillis = currentSessionMillis,
+        completedSessionCount = 0,
+        medianSessionMillis = medianSessionMillis,
+        lastGapMillis = lastGapMillis,
+        previousPackage = "",
+        continuousActivityMillis = continuousActivityMillis,
     )
 
     private fun minutes(value: Long): Long = value * 60L * 1_000L
