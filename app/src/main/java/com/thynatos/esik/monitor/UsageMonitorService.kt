@@ -19,10 +19,14 @@ import androidx.core.content.ContextCompat
 import com.thynatos.esik.MainActivity
 import com.thynatos.esik.R
 import com.thynatos.esik.ai.GeminiAiGateway
+import com.thynatos.esik.ai.NeedInference
+import com.thynatos.esik.ai.NeedInferenceCalibration
 import com.thynatos.esik.data.JsonEsikRepository
 import com.thynatos.esik.overlay.OverlayController
 import com.thynatos.esik.usage.CooldownPolicy
 import com.thynatos.esik.usage.UsageStatsReader
+import java.time.Instant
+import java.time.ZoneId
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -120,9 +124,25 @@ class UsageMonitorService : Service() {
             )
         }
 
-        debugState("eligible: usage=$usageMinutes/${profile.dailyLimitMinutes}m; showing overlay")
+        // The user-defined threshold remains the only trigger. Recent usage shape is read only now,
+        // after eligibility is already established, to reduce friction in the context question.
+        val pattern = usageStatsReader.patternSnapshot(profile.targetPackage, now)
+        val hypothesis = NeedInferenceCalibration.filter(
+            hypothesis = NeedInference.infer(
+                pattern = pattern,
+                hourOfDay = Instant.ofEpochMilli(now)
+                    .atZone(ZoneId.systemDefault())
+                    .hour,
+            ),
+            records = repository.loadRecords(),
+        )
+
+        debugState(
+            "eligible: usage=$usageMinutes/${profile.dailyLimitMinutes}m; " +
+                "context=${hypothesis?.stateId ?: "ask"}; showing overlay",
+        )
         ContextCompat.getMainExecutor(this).execute {
-            if (overlayController.show(profile, usageMinutes)) {
+            if (overlayController.show(profile, usageMinutes, hypothesis)) {
                 preferences.edit().putLong(KEY_LAST_SHOWN_AT, now).apply()
                 debugState("overlay shown; cooldown started")
             } else {
