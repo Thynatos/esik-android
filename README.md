@@ -12,7 +12,7 @@ Eşik currently includes:
 - Gemini-assisted profile structuring from user-supplied goals, contexts, and activities;
 - a user-selected target app and user-defined daily threshold;
 - `UsageStatsManager` usage reads and foreground-app detection;
-- a foreground monitoring service with 60-second polling;
+- a foreground monitoring service with responsive 5-second polling;
 - a real `TYPE_APPLICATION_OVERLAY` intervention over the target app;
 - three personalized local quick states plus custom text and voice input;
 - policy-constrained Gemini intervention cards with semantic validation and one bounded repair attempt;

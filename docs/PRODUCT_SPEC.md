@@ -136,7 +136,7 @@ onboarding
   -> local profile + user-defined target/threshold saved
   -> user starts monitoring
   -> optional notification permission request if needed
-  -> foreground service polls every 60 seconds
+  -> foreground service polls every 5 seconds
   -> target app is foreground
   -> local usage >= user threshold
   -> screen is active/unlocked
