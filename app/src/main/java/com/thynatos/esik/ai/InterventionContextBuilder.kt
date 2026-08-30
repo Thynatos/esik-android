@@ -63,6 +63,28 @@ object InterventionContextBuilder {
                 maxDurationMinutes = 10,
             )
 
+            STATE_LOW_MOTIVATION -> PolicySeed(
+                need = InterventionNeed.ACTIVATION,
+                energy = if (lowEnergy) EnergyExpectation.LOW else EnergyExpectation.UNKNOWN,
+                objective = InterventionObjective.MICRO_START,
+                strategies = setOf(
+                    InterventionStrategy.MICRO_START,
+                    InterventionStrategy.SENSORY_BREAK,
+                ),
+                maxDurationMinutes = 3,
+            )
+
+            STATE_OVERWHELMED -> PolicySeed(
+                need = InterventionNeed.ACTIVATION,
+                energy = if (lowEnergy) EnergyExpectation.LOW else EnergyExpectation.NORMAL,
+                objective = InterventionObjective.MICRO_START,
+                strategies = setOf(
+                    InterventionStrategy.MICRO_START,
+                    InterventionStrategy.ENVIRONMENT_CHANGE,
+                ),
+                maxDurationMinutes = 3,
+            )
+
             STATE_BORED -> PolicySeed(
                 need = InterventionNeed.BOREDOM,
                 energy = if (lowEnergy) EnergyExpectation.LOW else EnergyExpectation.NORMAL,
@@ -162,6 +184,8 @@ object InterventionContextBuilder {
 
     private fun inferState(normalizedText: String): String? = when {
         normalizedText.containsAny(PROCRASTINATION_CUES) -> STATE_PROCRASTINATING
+        normalizedText.containsAny(LOW_MOTIVATION_CUES) -> STATE_LOW_MOTIVATION
+        normalizedText.containsAny(OVERWHELMED_CUES) -> STATE_OVERWHELMED
         normalizedText.containsAny(FATIGUE_CUES) -> STATE_TIRED
         normalizedText.containsAny(INTENTIONAL_REST_CUES) -> STATE_RELAXING
         normalizedText.containsAny(BOREDOM_CUES) -> STATE_BORED
@@ -181,6 +205,8 @@ object InterventionContextBuilder {
             "waiting" -> STATE_WAITING
             "habit", "automatic" -> STATE_HABIT
             "late_night", "night" -> STATE_LATE_NIGHT
+            "low_motivation", "unmotivated" -> STATE_LOW_MOTIVATION
+            "overwhelmed" -> STATE_OVERWHELMED
             "other" -> STATE_OTHER
             else -> null
         }
@@ -188,7 +214,8 @@ object InterventionContextBuilder {
 
     private fun UserProfile.toAnchors(lowEnergy: Boolean): PersonalizationAnchors {
         val goals = (
-            personalization.goals +
+            personalization.focusTargets +
+                personalization.goals +
                 listOf(improvementArea, reason)
             )
             .safeGroundingValues(maxItems = 4)
@@ -259,6 +286,8 @@ object InterventionContextBuilder {
     private const val STATE_WAITING = "waiting"
     private const val STATE_HABIT = "habit"
     private const val STATE_LATE_NIGHT = "late_night"
+    private const val STATE_LOW_MOTIVATION = "low_motivation"
+    private const val STATE_OVERWHELMED = "overwhelmed"
     private const val STATE_OTHER = "other"
 
     private val FATIGUE_CUES = setOf(
@@ -325,6 +354,30 @@ object InterventionContextBuilder {
         "sleep",
         "bedtime",
         "late night",
+    )
+    private val LOW_MOTIVATION_CUES = setOf(
+        "motivasyonum dusuk",
+        "motivasyonum dustu",
+        "motivasyonum yok",
+        "motivasyon yok",
+        "hic baslayasim yok",
+        "canim istemiyor",
+        "istegim yok",
+        "unmotivated",
+        "no motivation",
+        "don t feel like starting",
+        "do not feel like starting",
+    )
+    private val OVERWHELMED_CUES = setOf(
+        "cok fazla sey var",
+        "nereden baslayacagimi bilmiyorum",
+        "nereden baslayacagim",
+        "bunaldim",
+        "gozumde buyuyor",
+        "overwhelmed",
+        "too much to do",
+        "don t know where to start",
+        "do not know where to start",
     )
     private val HIGH_EFFORT_CUES = setOf(
         "agir antrenman",

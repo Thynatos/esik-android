@@ -146,6 +146,82 @@ class InterventionContextBuilderTest {
         assertNotEquals(tired.allowedStrategies, relaxing.allowedStrategies)
     }
 
+    @Test
+    fun lowMotivationTextResolvesToActivationPolicy() {
+        val policy = InterventionContextBuilder.build(
+            profile = profile(goals = listOf("rapora başlamak")),
+            input = InterventionInput(
+                text = "Motivasyonum düşük, hiç başlayasım yok",
+                method = InterventionInputMethod.TEXT,
+            ),
+        )
+
+        assertEquals("low_motivation", policy.resolvedStateId)
+        assertEquals(InterventionNeed.ACTIVATION, policy.need)
+        assertEquals(InterventionObjective.MICRO_START, policy.objective)
+        assertTrue(policy.allowedStrategies.contains(InterventionStrategy.MICRO_START))
+        assertTrue(policy.allowedStrategies.contains(InterventionStrategy.SENSORY_BREAK))
+        assertEquals(3, policy.maxDurationMinutes)
+    }
+
+    @Test
+    fun overwhelmedTextResolvesToOneTinyStepPolicy() {
+        val policy = InterventionContextBuilder.build(
+            profile = profile(),
+            input = InterventionInput(
+                text = "Nereden başlayacağımı bilmiyorum, çok fazla iş var",
+                method = InterventionInputMethod.TEXT,
+            ),
+        )
+
+        assertEquals("overwhelmed", policy.resolvedStateId)
+        assertEquals(InterventionNeed.ACTIVATION, policy.need)
+        assertEquals(InterventionObjective.MICRO_START, policy.objective)
+        assertTrue(policy.allowedStrategies.contains(InterventionStrategy.MICRO_START))
+        assertTrue(policy.allowedStrategies.contains(InterventionStrategy.ENVIRONMENT_CHANGE))
+        assertEquals(3, policy.maxDurationMinutes)
+    }
+
+    @Test
+    fun lowMotivationQuickReplyUsesCanonicalState() {
+        val policy = InterventionContextBuilder.build(
+            profile = profile(),
+            input = quickInput("low_motivation", "Motivasyonum düşük"),
+        )
+
+        assertEquals("low_motivation", policy.resolvedStateId)
+        assertEquals(InterventionObjective.MICRO_START, policy.objective)
+    }
+
+    @Test
+    fun tiredMotivationKeepsActivationWithLowEnergyHandling() {
+        val policy = InterventionContextBuilder.build(
+            profile = profile(),
+            input = InterventionInput(
+                text = "Motivasyonum düşük ve çok yorgunum",
+                method = InterventionInputMethod.TEXT,
+            ),
+        )
+
+        assertEquals("low_motivation", policy.resolvedStateId)
+        assertEquals(EnergyExpectation.LOW, policy.energy)
+        assertEquals(3, policy.maxDurationMinutes)
+    }
+
+    @Test
+    fun focusTargetsBecomePreferredAnchors() {
+        val policy = InterventionContextBuilder.build(
+            profile = profile(
+                focusTargets = listOf("ders çalışmak"),
+                goals = listOf("daha üretken olmak"),
+            ),
+            input = quickInput("procrastinating", "Bir şeyi erteliyorum"),
+        )
+
+        assertEquals("ders çalışmak", policy.anchors.goals.first())
+        assertTrue(policy.anchors.goals.contains("daha üretken olmak"))
+    }
+
     private fun quickInput(stateId: String, label: String): InterventionInput =
         InterventionInput(
             text = label,
@@ -156,6 +232,7 @@ class InterventionContextBuilderTest {
 
     private fun profile(
         goals: List<String> = emptyList(),
+        focusTargets: List<String> = emptyList(),
         activities: List<String> = emptyList(),
         lowEnergyActivities: List<String> = emptyList(),
     ): UserProfile = UserProfile(
@@ -169,6 +246,7 @@ class InterventionContextBuilderTest {
         dailyLimitMinutes = 60,
         personalization = PersonalizationProfile(
             goals = goals,
+            focusTargets = focusTargets,
             preferredActivities = activities,
             lowEnergyActivities = lowEnergyActivities,
         ),

@@ -6,8 +6,9 @@ import org.json.JSONObject
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-class JsonEsikRepository(context: Context) : EsikRepository {
-    private val stateFile = File(context.filesDir, FILE_NAME)
+class JsonEsikRepository internal constructor(private val stateFile: File) : EsikRepository {
+    constructor(context: Context) : this(File(context.filesDir, FILE_NAME))
+
     private val lock = Any()
 
     override fun loadProfile(): UserProfile? = synchronized(lock) {
@@ -67,6 +68,10 @@ class JsonEsikRepository(context: Context) : EsikRepository {
                         ),
                         aiQuestion = item.optString("ai_soru"),
                         aiAlternative = item.optString("ai_alternatif"),
+                        aiReflection = item.optString("ai_yansima"),
+                        aiActivityTitle = item.optString("ai_aktivite_basligi"),
+                        aiDurationMinutes = item.optInt("ai_sure_dk", 0).coerceAtLeast(0),
+                        aiStrategy = item.optString("ai_strateji"),
                     ),
                 )
             }
@@ -132,9 +137,15 @@ class JsonEsikRepository(context: Context) : EsikRepository {
             .put("girdi_yontemi", inputMethod.storageValue)
             .put("ai_soru", aiQuestion)
             .put("ai_alternatif", aiAlternative)
+            .put("ai_yansima", aiReflection)
+            .put("ai_aktivite_basligi", aiActivityTitle)
+            .put("ai_sure_dk", aiDurationMinutes)
+            .put("ai_strateji", aiStrategy)
 
     private fun PersonalizationProfile.toJson(): JSONObject =
         JSONObject()
+            .put("profil_ozeti", profileSummary)
+            .put("odak_hedefleri", JSONArray(focusTargets))
             .put("hedefler", JSONArray(goals))
             .put("tekrarlayan_baglamlar", JSONArray(recurringContexts))
             .put("tercih_edilen_aktiviteler", JSONArray(preferredActivities))
@@ -158,6 +169,8 @@ class JsonEsikRepository(context: Context) : EsikRepository {
     private fun JSONObject?.toPersonalization(): PersonalizationProfile {
         if (this == null) return PersonalizationProfile()
         return PersonalizationProfile(
+            profileSummary = optString("profil_ozeti"),
+            focusTargets = optJSONArray("odak_hedefleri").toStringList(),
             goals = optJSONArray("hedefler").toStringList(),
             recurringContexts = optJSONArray("tekrarlayan_baglamlar").toStringList(),
             preferredActivities = optJSONArray("tercih_edilen_aktiviteler").toStringList(),

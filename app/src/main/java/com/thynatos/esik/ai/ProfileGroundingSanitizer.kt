@@ -2,6 +2,7 @@ package com.thynatos.esik.ai
 
 import com.thynatos.esik.data.PersonalizationProfile
 import com.thynatos.esik.data.ProfileIntake
+import com.thynatos.esik.data.QuickStateTaxonomy
 
 internal object ProfileGroundingSanitizer {
     fun sanitize(
@@ -19,6 +20,12 @@ internal object ProfileGroundingSanitizer {
             intake.biography,
             intake.hobbies.joinToString(" "),
         ).joinToString(" ")
+
+        val focusTargets = generated.focusTargets
+            .filter { value -> isGrounded(value, allEvidence) }
+            .ifEmpty { fallback.focusTargets }
+            .distinct()
+            .take(MAX_FOCUS_TARGETS)
 
         val goals = generated.goals
             .filter { value -> isGrounded(value, allEvidence) }
@@ -54,9 +61,12 @@ internal object ProfileGroundingSanitizer {
             .take(3)
 
         val quickStates = generated.quickStates
+            .mapNotNull { option ->
+                val canonicalId = QuickStateTaxonomy.canonicalize(option.id)
+                canonicalId?.let { option.copy(id = it) }
+            }
             .filter { option ->
-                option.id.isNotBlank() &&
-                    option.label.isNotBlank() &&
+                option.label.isNotBlank() &&
                     option.label.length <= 70 &&
                     SafetyLanguageValidator.isDisplaySafe(option.label)
             }
@@ -68,13 +78,79 @@ internal object ProfileGroundingSanitizer {
                     .take(6)
             }
 
+        val groundedFieldText = (
+            goals + contexts + activities + lowEnergy + focusTargets
+            ).joinToString(" ")
+
+        val profileSummary = generated.profileSummary
+            .takeIf { isSafeGroundedSummary(it, groundedFieldText) }
+            ?: buildLocalSummary(focusTargets, goals, contexts, activities)
+
         return generated.copy(
+            profileSummary = profileSummary,
+            focusTargets = focusTargets,
             goals = goals,
             recurringContexts = contexts,
             preferredActivities = activities,
             lowEnergyActivities = lowEnergy,
             quickStates = quickStates,
         )
+    }
+
+    /**
+     * Deterministic local summary used when the generated summary fails validation. Built only
+     * from already-sanitized fields so it can never introduce ungrounded facts.
+     */
+    fun buildLocalSummary(
+        focusTargets: List<String>,
+        goals: List<String>,
+        contexts: List<String>,
+        activities: List<String>,
+    ): String {
+        val focus = (focusTargets + goals)
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+            .take(2)
+        val moments = contexts.take(2)
+        val options = activities.take(3)
+
+        val body = buildList {
+            if (focus.isNotEmpty()) {
+                add("Özellikle ${focus.joinToString(" ve ")} konusuna odaklanmak istiyorsun")
+            }
+            if (moments.isNotEmpty()) {
+                add("${moments.joinToString(" ve ")} anları senin için öne çıkıyor")
+            }
+            if (options.isNotEmpty()) {
+                add("Molalarda ${options.joinToString(", ")} gibi seçenekler işine gelebilir")
+            }
+        }.joinToString(separator = ". ")
+
+        return buildString {
+            append("Bu profil yalnızca senin anlattıklarından oluşturuldu. ")
+            if (body.isNotEmpty()) {
+                append(body)
+                append('.')
+            } else {
+                append("Eşik önerilerini senin belirlediğin sınırlar içinde kişiselleştirecek.")
+            }
+        }.take(MAX_SUMMARY_CHARS)
+    }
+
+    private fun isSafeGroundedSummary(summary: String, groundedFieldText: String): Boolean {
+        val trimmed = summary.trim()
+        if (trimmed.length !in MIN_SUMMARY_CHARS..MAX_SUMMARY_CHARS) return false
+        if (!SafetyLanguageValidator.isDisplaySafe(trimmed)) return false
+        val normalized = trimmed.normalizeForGrounding()
+        if (UNSAFE_SUMMARY_CUES.any(normalized::contains)) return false
+        if (groundedFieldText.isBlank()) return false
+        val summaryTokens = trimmed.meaningfulTokens()
+        val fieldTokens = groundedFieldText.meaningfulTokens()
+        if (summaryTokens.any(fieldTokens::contains)) return true
+        return SEMANTIC_GROUPS.any { group ->
+            summaryTokens.any(group::contains) && fieldTokens.any(group::contains)
+        }
     }
 
     private fun isGrounded(value: String, evidence: String): Boolean {
@@ -119,6 +195,10 @@ internal object ProfileGroundingSanitizer {
             .replace(Regex("[^a-z0-9]+"), " ")
             .trim()
 
+    private const val MAX_SUMMARY_CHARS = 320
+    private const val MIN_SUMMARY_CHARS = 24
+    private const val MAX_FOCUS_TARGETS = 4
+
     private val STOP_WORDS = setOf(
         "daha",
         "icin",
@@ -160,5 +240,20 @@ internal object ProfileGroundingSanitizer {
         "breath",
         "screen break",
         "put the phone down",
+    )
+    private val UNSAFE_SUMMARY_CUES = setOf(
+        "tembel",
+        "disiplinsiz",
+        "dopamin",
+        "bagimli",
+        "iradesiz",
+        "kusurlu",
+        "sorunlu",
+        "hastalik",
+        "nedeniyle",
+        "yuzunden",
+        "dolayi",
+        "sebebi",
+        "cunku",
     )
 }

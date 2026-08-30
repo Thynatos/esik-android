@@ -21,6 +21,21 @@ class MockAiGateway : AiGateway {
             intake.hobbies.joinToString(" "),
         ).joinToString(" ").lowercase()
 
+        val focusTargets = buildList {
+            if (combined.containsAny("ders", "çalışma", "derslere", "study")) {
+                add("ders çalışmak")
+            }
+            if (combined.containsAny("ödev", "homework", "assignment")) {
+                add("ödeve başlamak")
+            }
+            if (combined.containsAny("uyku", "uyumak", "sleep", "yatmadan")) {
+                add("uykuya geçmek")
+            }
+            if (combined.containsAny("işi", "işe", "work")) {
+                add("işe odaklanmak")
+            }
+        }.distinct().take(4)
+
         val goals = buildList {
             intake.improvementArea.trim().takeIf(String::isNotEmpty)?.let(::add)
             intake.reason.trim().takeIf(String::isNotEmpty)?.let(::add)
@@ -43,6 +58,12 @@ class MockAiGateway : AiGateway {
                 )
             ) {
                 add("erteleme")
+            }
+            if (combined.containsAny("motivasyon", "başlayasım", "canım istemiyor", "unmotivated")) {
+                add("motivasyon düşüklüğü")
+            }
+            if (combined.containsAny("bunald", "nereden başlaya", "gözümde büyü", "çok fazla iş", "overwhelmed")) {
+                add("bunalmışlık")
             }
             if (combined.containsAny("sıkıl", "bored", "boş kald")) add("sıkılma")
             if (combined.containsAny("rahatla", "dinlen", "kafa dağıt", "relax")) add("dinlenme")
@@ -75,6 +96,13 @@ class MockAiGateway : AiGateway {
             .take(6)
 
         return PersonalizationProfile(
+            profileSummary = ProfileGroundingSanitizer.buildLocalSummary(
+                focusTargets = focusTargets,
+                goals = goals,
+                contexts = contexts,
+                activities = preferredActivities,
+            ),
+            focusTargets = focusTargets,
             goals = goals,
             recurringContexts = contexts,
             preferredActivities = preferredActivities,
@@ -250,6 +278,8 @@ class MockAiGateway : AiGateway {
     private fun stateForContext(context: String): QuickStateOption? = when (context) {
         "yorgunluk" -> QuickStateOption("tired", "Biraz yoruldum", "😴", "low_energy")
         "erteleme" -> QuickStateOption("procrastinating", "Bir şeyi erteliyorum", "🫠", "avoidance")
+        "motivasyon düşüklüğü" -> QuickStateOption("low_motivation", "Motivasyonum düşük", "🪫", "activation")
+        "bunalmışlık" -> QuickStateOption("overwhelmed", "Her şey bunaltıyor", "🌀", "activation")
         "dinlenme" -> QuickStateOption("relaxing", "Sadece kafa dağıtıyorum", "😌", "intentional_rest")
         "sıkılma" -> QuickStateOption("bored", "Biraz sıkıldım", "🥱", "boredom")
         "gece kullanımı" -> QuickStateOption("late_night", "Uyumadan önce bakıyorum", "🌙", "late_night")

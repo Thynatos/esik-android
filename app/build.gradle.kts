@@ -96,4 +96,6 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 
     testImplementation(libs.junit)
+    // JVM JSON implementation so repository persistence tests run without Android stubs.
+    testImplementation("org.json:json:20240303")
 }

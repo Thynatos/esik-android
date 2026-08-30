@@ -19,7 +19,7 @@ data class UserProfile(
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
 ) {
     companion object {
-        const val CURRENT_SCHEMA_VERSION: Int = 2
+        const val CURRENT_SCHEMA_VERSION: Int = 3
     }
 }
 
@@ -35,6 +35,8 @@ data class ProfileIntake(
 data class PersonalizationProfile(
     val goals: List<String> = emptyList(),
     val recurringContexts: List<String> = emptyList(),
+    val profileSummary: String = "",
+    val focusTargets: List<String> = emptyList(),
     val preferredActivities: List<String> = emptyList(),
     val lowEnergyActivities: List<String> = emptyList(),
     val quickStates: List<QuickStateOption> = emptyList(),
@@ -55,6 +57,51 @@ data class QuickStateOption(
     val category: String = id,
 )
 
+/**
+ * Canonical quick-state semantic IDs. Models may personalize labels and emoji, but never the
+ * semantic ID itself. Safely recognizable aliases are mapped; unknown IDs are discarded.
+ */
+object QuickStateTaxonomy {
+    val CANONICAL_IDS: Set<String> = setOf(
+        "tired",
+        "procrastinating",
+        "relaxing",
+        "bored",
+        "habit",
+        "waiting",
+        "low_motivation",
+        "overwhelmed",
+        "late_night",
+        "other",
+    )
+
+    private val ID_ALIASES: Map<String, String> = mapOf(
+        "low_energy" to "tired",
+        "fatigue" to "tired",
+        "procrastination" to "procrastinating",
+        "avoidance" to "procrastinating",
+        "intentional_rest" to "relaxing",
+        "rest" to "relaxing",
+        "boredom" to "bored",
+        "unmotivated" to "low_motivation",
+        "motivation" to "low_motivation",
+        "activation" to "low_motivation",
+        "stressed" to "overwhelmed",
+        "stress" to "overwhelmed",
+        "burnout" to "overwhelmed",
+        "automatic" to "habit",
+        "night" to "late_night",
+    )
+
+    private val NON_ID_CHARS = Regex("[^a-z0-9]+")
+
+    fun canonicalize(rawId: String): String? {
+        val normalized = rawId.trim().lowercase().replace(NON_ID_CHARS, "_").trim('_')
+        if (normalized in CANONICAL_IDS) return normalized
+        return ID_ALIASES[normalized]
+    }
+}
+
 enum class ProfileTone(val storageValue: String) {
     SUPPORTIVE_DIRECT("supportive_direct"),
     GENTLE("gentle"),
@@ -70,6 +117,8 @@ object PersonalizationDefaults {
     val quickStates: List<QuickStateOption> = listOf(
         QuickStateOption("tired", "Biraz yoruldum", "😴", "low_energy"),
         QuickStateOption("procrastinating", "Bir şeyi erteliyorum", "🫠", "avoidance"),
+        QuickStateOption("low_motivation", "Motivasyonum düşük", "🪫", "activation"),
+        QuickStateOption("overwhelmed", "Her şey bunaltıyor", "🌀", "activation"),
         QuickStateOption("relaxing", "Sadece kafa dağıtıyorum", "😌", "intentional_rest"),
         QuickStateOption("bored", "Biraz sıkıldım", "🥱", "boredom"),
         QuickStateOption("habit", "Alışkanlıkla açtım", "🔁", "habit"),
@@ -115,6 +164,10 @@ data class InterventionRecord(
     val inputMethod: InterventionInputMethod = InterventionInputMethod.TEXT,
     val aiQuestion: String = "",
     val aiAlternative: String = "",
+    val aiReflection: String = "",
+    val aiActivityTitle: String = "",
+    val aiDurationMinutes: Int = 0,
+    val aiStrategy: String = "",
 ) {
     fun localTime(zoneId: ZoneId = ZoneId.systemDefault()): String =
         TIME_FORMATTER.format(Instant.ofEpochMilli(timestampEpochMillis).atZone(zoneId))
@@ -133,8 +186,12 @@ data class InterventionRecord(
 }
 
 data class AiCard(
+    val reflection: String = "",
     val question: String,
+    val activityTitle: String = "",
     val alternative: String,
+    val durationMinutes: Int = 0,
+    val strategy: String = "",
 )
 
 data class DailyReport(

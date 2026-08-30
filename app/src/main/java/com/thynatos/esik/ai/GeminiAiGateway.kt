@@ -325,6 +325,8 @@ class GeminiAiGateway(
             .take(6)
 
         return PersonalizationProfile(
+            profileSummary = json.optString("profile_summary").trim(),
+            focusTargets = json.optJSONArray("focus_targets").toSafeStringList(maxItems = 4),
             goals = json.optJSONArray("goals").toSafeStringList(maxItems = 3),
             recurringContexts = json.optJSONArray("recurring_contexts")
                 .toSafeStringList(maxItems = 4),
@@ -340,6 +342,8 @@ class GeminiAiGateway(
     private fun PersonalizationProfile.withFallbackDefaults(
         fallbackProfile: PersonalizationProfile,
     ): PersonalizationProfile = copy(
+        profileSummary = profileSummary.ifBlank { fallbackProfile.profileSummary },
+        focusTargets = focusTargets.ifEmpty { fallbackProfile.focusTargets },
         goals = goals.ifEmpty { fallbackProfile.goals },
         recurringContexts = recurringContexts.ifEmpty { fallbackProfile.recurringContexts },
         preferredActivities = preferredActivities.ifEmpty { fallbackProfile.preferredActivities },
@@ -688,6 +692,16 @@ class GeminiAiGateway(
                 "properties",
                 JSONObject()
                     .put(
+                        "profile_summary",
+                        JSONObject().put("type", "string"),
+                    )
+                    .put(
+                        "focus_targets",
+                        JSONObject()
+                            .put("type", "array")
+                            .put("items", JSONObject().put("type", "string")),
+                    )
+                    .put(
                         "goals",
                         JSONObject()
                             .put("type", "array")
@@ -747,6 +761,8 @@ class GeminiAiGateway(
                 "required",
                 JSONArray(
                     listOf(
+                        "profile_summary",
+                        "focus_targets",
                         "goals",
                         "recurring_contexts",
                         "preferred_activities",
