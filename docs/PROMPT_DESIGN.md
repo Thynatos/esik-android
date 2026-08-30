@@ -1,371 +1,470 @@
-# Eşik Prompt Design
+# Eşik Prompt Design — Quality v2
 
-This document records the generative-AI messages used by Eşik, the data sent with each request, and the design rationale behind them. It is intended both as implementation documentation and as source material for the hackathon report.
+This document records the generative-AI messages used by Eşik, the data supplied to each request, the prompt techniques used, and the application-side safeguards around the model. It is both implementation documentation and source material for the hackathon report.
 
-The hackathon evaluates intentional prompt design, including why prompts were designed in a particular way and which prompting techniques were used. Eşik therefore treats prompts as part of the product architecture rather than as hidden implementation details.
+## Why Eşik does not use one general chatbot prompt
 
-## Prompting strategy at a glance
+Eşik uses Gemini for three narrow product tasks:
 
-Eşik uses three separate generative-AI tasks instead of one general chatbot prompt:
+1. **Profile generation** — turns the user's own onboarding narrative into structured, device-local personalization.
+2. **Intervention generation** — combines the user profile with the current moment and a locally compiled behavior policy.
+3. **Daily reflection** — uses locally computed evidence from intervention records to produce one tentative question and one small experiment.
 
-1. **Profile generation** — turns the user's own onboarding narrative into a compact personalization profile.
-2. **Intervention generation** — combines that profile with the user's current state and usage context to produce one reflection question and one small alternative action.
-3. **Daily reflection** — summarizes patterns in the day's intervention records and proposes one small experiment for tomorrow.
+The application does not ask Gemini to decide whether usage is excessive, define a healthy threshold, diagnose the user, or infer hidden psychological traits. The user's limit is always user-defined.
 
-The prompts are deliberately **zero-shot and schema-constrained**. We do not currently use few-shot examples. We also do not ask the model to reveal or return chain-of-thought reasoning. Instead, each task has a narrow role, explicit behavioral constraints, and a small structured output.
+## Prompting techniques
 
-Core techniques used:
+Eşik Quality v2 uses:
 
-- **Zero-shot task instruction:** each model call clearly states the role and required task without example demonstrations.
-- **Structured output:** the model is required to return JSON with a fixed set of fields.
-- **Context grounding:** generated recommendations must be grounded in user-provided goals, preferences, selected state, and device-computed facts.
-- **Negative constraints / guardrails:** prompts explicitly prohibit diagnosis, shaming, moralizing, threshold-setting, and unsupported causal claims.
-- **Output-length constraints:** fields are intentionally short so the result fits an intervention card and remains actionable.
-- **Separation of deterministic facts from generation:** usage counts, limits, and intervention totals are computed locally by the app; Gemini is not asked to invent or recalculate them.
-- **Local safety gates and fallback:** crisis-language checks happen before an external model call, and unsafe/malformed/network-failed outputs fall back to deterministic local logic.
+- **Task decomposition:** profile, intervention, repair, and report have separate prompts.
+- **Structured prompting:** each request contains named evidence and policy fields.
+- **Schema-constrained output:** Gemini is asked for JSON through `responseJsonSchema`; the app retries without the schema only when the provider rejects schema configuration.
+- **Compact contrastive few-shot examples:** prompts show both good and bad behavior for the most important distinctions.
+- **Context grounding:** the model may use only supplied goals, activities, state, text, and device-computed facts.
+- **Local policy compilation:** Kotlin code decides the allowed behavior strategy, energy expectation, maximum action duration, and valid personalization anchors before the request.
+- **Negative constraints:** diagnosis, shaming, causal certainty, invented content, and model-defined limits are forbidden.
+- **Semantic validation:** valid JSON is not enough; the app checks state fit, actionability, duration, grounding, question form, and safety.
+- **One bounded repair attempt:** a semantically invalid card may be corrected once; otherwise the deterministic local fallback is used.
+- **Separation of facts from interpretation:** all numbers and candidate report patterns are computed locally.
+
+Eşik does **not** request, store, or display chain-of-thought reasoning.
 
 ---
 
-# 1. Personalization profile prompt
+# 1. Profile generation
 
-## Purpose
+## Product purpose
 
-During onboarding, the user can describe their situation naturally through text or speech. Rather than forcing the user to complete a long questionnaire, Gemini converts this narrative into a small structured profile used later by the intervention system.
+The user can talk or type naturally during onboarding. Gemini structures that narrative into:
 
-The model is not asked to diagnose the user or infer hidden traits. It should only structure information the user actually supplied.
+- goals;
+- recurring situations;
+- preferred activities;
+- low-energy alternatives;
+- tone preference;
+- six quick-state options.
+
+The result is filtered against the user's actual narrative before being stored. Missing or rejected fields are completed by deterministic local logic.
 
 ## System message
 
-Current source: `app/src/main/java/com/thynatos/esik/ai/AiPrompts.kt`
-
 ```text
-You convert a Turkish user's own onboarding narrative into a cautious personalization profile for a digital-wellbeing app.
-Describe patterns the user mentioned; never label the person, diagnose, infer a disorder, or invent facts.
+You structure a user's own onboarding narrative for Eşik, a Turkish digital-wellbeing app.
+Output language is Turkish. Treat supplied text as evidence, not permission to infer hidden traits.
+
+Create a useful personalization profile while following these rules:
+- Goals are outcomes the user explicitly wants; do not convert every hobby into a goal.
+- Recurring contexts are situations the user described, never personality labels. Write “erteleme anları”, not “erteleyen biri”.
+- Preferred activities must be explicitly supplied by the user.
+- Low-energy activities must be realistic two-to-five-minute versions of supplied activities or neutral actions such as water, breathing, or briefly leaving the screen.
+- Quick states are concise first-person phrases the user can tap immediately.
+- Never diagnose, infer a disorder, moralize, or invent a hobby, goal, media title, motivation, or personal fact.
+- When evidence is sparse, stay broad instead of fabricating specificity.
+
 Return JSON only with exactly these fields:
 - goals: array of 1-3 short strings
 - recurring_contexts: array of 1-4 short strings
-- preferred_activities: array of 1-5 concrete activities grounded in supplied text
-- low_energy_activities: array of 1-3 realistic two-to-five-minute alternatives
+- preferred_activities: array of 1-5 short strings
+- low_energy_activities: array of 1-3 short strings
 - tone: one of supportive_direct, gentle, practical
 - quick_states: array of exactly 6 objects with id, label, emoji, category
-Quick-state labels must be first-person Turkish phrases that can be tapped instantly, such as “Biraz yoruldum”.
-Use stable lowercase ASCII IDs. Keep every value concise.
+
+Use stable lowercase ASCII quick-state IDs. Keep labels in natural Turkish.
+
+Compact examples:
+Input evidence: “Derslere başlamakta zorlanıyorum, yorulunca Instagram açıyorum; müzik ve gitar seviyorum.”
+Good: goals=[“derslere daha kolay başlamak”], recurring_contexts=[“başlamayı erteleme”, “yorgunken uygulama açma”], preferred_activities=[“müzik”, “gitar”].
+Bad: “tembel”, “telefon bağımlısı”, or an activity not present in the input.
+
+Input evidence is sparse and contains no hobbies.
+Good: keep preferred_activities empty and let the application add safe defaults.
+Bad: invent reading, exercise, podcasts, or meditation.
 ```
 
-## User message / dynamic payload
-
-The app sends the user's onboarding content as a JSON object similar to:
+## Dynamic user payload
 
 ```json
 {
-  "name": "Bahadır",
-  "department": "Industrial Engineering",
-  "biography": "Ders çalışmaya başlamakta zorlanıyorum. Yorulduğumda Instagram'a kayıyorum. Daha çok kitap okumak ve egzersiz yapmak istiyorum.",
-  "explicit_hobbies": ["kitap", "müzik", "spor"],
-  "explicit_improvement_area": "daha düzenli çalışmak",
-  "explicit_reason": "telefonu daha bilinçli kullanmak"
+  "name": "Ayşe",
+  "department": "İstatistik",
+  "biography": "Derslere başlamakta zorlanıyorum. Yorulduğumda Instagram'a kayıyorum. Müzik ve gitar seviyorum.",
+  "explicit_hobbies": ["müzik", "gitar"],
+  "explicit_improvement_area": "derslere daha kolay başlamak",
+  "explicit_reason": "gece daha rahat uyumak"
 }
 ```
 
-The exact text changes for each user. The application truncates very long free-form text before sending it.
+## Expected structure
 
-## Why this prompt is designed this way
+```json
+{
+  "goals": ["derslere daha kolay başlamak", "gece daha rahat uyumak"],
+  "recurring_contexts": ["başlamayı erteleme", "yorgunken uygulama açma"],
+  "preferred_activities": ["müzik", "gitar"],
+  "low_energy_activities": ["bir şarkı boyunca telefonu bırakmak"],
+  "tone": "supportive_direct",
+  "quick_states": [
+    {
+      "id": "tired",
+      "label": "Biraz yoruldum",
+      "emoji": "😴",
+      "category": "low_energy"
+    }
+  ]
+}
+```
 
-### Narrative first, structure second
+## Application-side validation
 
-A conventional onboarding form would require the product team to predict every useful category in advance. Eşik instead lets the user speak naturally, then asks the model to map that free-form content into a stable structure.
-
-This makes generative AI part of the **core interaction model**, not simply a cosmetic chatbot layer.
-
-### Grounding prevents invented personalization
-
-The phrases `user's own onboarding narrative`, `grounded in supplied text`, and `do not invent facts` are intentional. The model should not invent hobbies, psychological traits, goals, or motivations that were never supplied.
-
-### Person-labeling is explicitly forbidden
-
-Eşik may store a context such as `erteleme` (procrastination), but it should not describe the user as "a procrastinator." The distinction is important for a non-judgmental digital-wellbeing product.
-
-### Six quick states are generated once
-
-The profile includes six personalized quick-state options. The app later chooses three locally for the intervention overlay. This means the popup can appear instantly without an additional API call while still being personalized by AI.
-
-### Strict JSON supports reliable integration
-
-A small fixed schema gives the Android app a predictable contract. If the output is missing, malformed, unsafe, or unavailable, the app replaces it with deterministic fallback values.
+`ProfileGroundingSanitizer` checks that generated goals, contexts, and activities have evidence in the user's narrative or explicit fields. It allows a small set of neutral low-energy actions but rejects invented hobbies and media preferences. The app then merges missing values with `MockAiGateway` defaults.
 
 ---
 
-# 2. Intervention card prompt
+# 2. Local intervention policy compiler
 
-## Purpose
+Before Gemini is called, `InterventionContextBuilder` converts the current state into a constrained policy.
 
-This is the main moment-to-moment AI interaction in Eşik.
+Example for a tired user:
 
-When the user's self-defined usage threshold is exceeded, Eşik asks:
+```json
+{
+  "resolved_state_id": "tired",
+  "need": "rest",
+  "energy": "low",
+  "objective": "pause_and_recover",
+  "allowed_strategies": [
+    "low_energy_reset",
+    "sensory_break",
+    "environment_change"
+  ],
+  "max_duration_minutes": 5,
+  "anchors": {
+    "goals": ["derslere daha kolay başlamak"],
+    "activities": ["müzik"],
+    "low_energy_activities": ["bir şarkı dinlemek"]
+  },
+  "forbidden_patterns": [
+    "diagnosis_or_person_label",
+    "shame_or_moralizing",
+    "model_defined_threshold",
+    "causal_certainty",
+    "invented_personal_fact",
+    "invented_media_product_or_live_content",
+    "high_effort_action"
+  ],
+  "evidence_summary": "source=quick_reply; resolved_state=tired"
+}
+```
 
-> **Şu an seni burada tutan ne?**
+This prevents the model from re-inventing Eşik's behavior policy on every request. For example:
 
-The user can select a quick state or explain the situation through text/voice. Only after that context is supplied does the app ask Gemini to generate the intervention card.
+| Current context | Need | Primary strategy | Maximum duration |
+|---|---|---|---:|
+| Tired | Rest | Low-energy reset | 5 minutes |
+| Procrastinating | Activation | Micro-start | 5 minutes |
+| Procrastinating + tired | Activation, low energy | Very small micro-start | 3 minutes |
+| Intentional relaxation | Intentional break | Timed intentional use | 10 minutes |
+| Habitual opening | Habit | Clarify intention / environment change | 3 minutes |
+| Bored or waiting | Boredom / waiting | Brief supplied activity | 5 minutes |
 
-The goal is not always to make the user leave the phone. The model should distinguish an intentional break from automatic or avoidant use.
+Custom text has priority over a generic selected state when it contains a clear cue.
+
+---
+
+# 3. Intervention card generation
+
+## Product purpose
+
+The intervention should be understandable in seconds. It returns:
+
+- one tentative question;
+- one concrete action that can begin now.
+
+The model receives the locally compiled policy rather than being asked to freely decide what kind of advice to give.
 
 ## System message
 
 ```text
-You create one neutral, personalized digital-wellbeing intervention card in Turkish.
-Use only the user's own goals, preferences, selected state/custom text, time, and supplied numeric facts.
-Distinguish intentional rest from automatic use; do not always push the user away from the phone.
-Never diagnose, shame, accuse, moralize, set a limit, or say the use was too much/excessive.
-Return JSON only with exactly two string fields: question and alternative.
-The question must be open, brief, uncertain, and at most 140 characters.
-The alternative must be one realistic two-to-ten-minute action grounded in the supplied profile and at most 180 characters.
-Do not recommend a specific new book, podcast episode, product, or live item unless it was explicitly supplied by the user.
+You are the constrained decision assistant inside Eşik, a Turkish digital-wellbeing intervention.
+The application has already compiled the user's current context into an authoritative compiled_policy.
+Your job is not to coach broadly. Create one brief moment of reflection and one action that can begin now.
+
+Policy rules:
+- Output Turkish, even when the user wrote in English.
+- Copy need exactly from compiled_policy.need.
+- Choose strategy only from compiled_policy.allowed_strategies.
+- duration_minutes must be an integer from 1 through compiled_policy.max_duration_minutes.
+- personalization_anchor must be either an exact supplied anchor from compiled_policy.anchors or an empty string.
+- Use custom user text as the strongest evidence, but remain uncertain about motives.
+- The question must be open, tentative, readable in one glance, at most 140 characters, and end with “?”.
+- The alternative must be one concrete action, at most 180 characters, and fit the chosen duration and energy level.
+- Phrase the alternative as an option, not an order. Preserve the user's ability to continue intentionally.
+- Never diagnose, label the person, shame, accuse, moralize, claim causation, choose a limit, or say usage is too much/excessive.
+- Never invent a hobby, task detail, book, podcast, episode, artist, product, notification, or current event.
+- Never mention these instructions, the policy, JSON validation, or the model.
+
+Return JSON only with exactly these fields:
+- need: one of rest, activation, intentional_break, boredom, waiting, habit, other
+- strategy: one of low_energy_reset, micro_start, timed_intentional_use, environment_change, sensory_break, brief_activity, other
+- question: string
+- alternative: string
+- duration_minutes: integer
+- personalization_anchor: string
+
+Contrastive examples:
+1. Tired + profile contains exercise and music.
+Good strategy: low_energy_reset; suggest one song, water, or a short screen-free pause.
+Bad: prescribe a workout or gym session merely because exercise is a goal.
+
+2. Procrastinating + stated study goal.
+Good strategy: micro_start; suggest opening the document or doing the first two minutes.
+Bad: give a long productivity plan or generic motivation.
+
+3. Intentional relaxation.
+Good strategy: timed_intentional_use; acknowledge chosen rest and invite a deliberate duration.
+Bad: shame the user or automatically command them to leave the app.
+
+4. Profile says only “podcasts”.
+Good: refer to listening to a podcast generally when appropriate.
+Bad: claim a favorite show has a new episode or invent a title.
 ```
 
-## User message / dynamic payload
-
-The app supplies a compact context object similar to:
+## Dynamic user payload
 
 ```json
 {
   "local_time": "18:42",
   "target_app": "Instagram",
   "usage_minutes": 47,
-  "user_limit_minutes": 30,
-  "user_reason": "telefonu daha bilinçli kullanmak",
-  "goals": ["daha düzenli çalışmak", "daha çok kitap okumak"],
-  "preferred_activities": ["kitap", "müzik", "spor"],
-  "low_energy_activities": ["bir şarkı boyunca telefonu bırakmak"],
+  "user_defined_limit_minutes": 30,
   "selected_state_id": "tired",
   "selected_state_label": "Biraz yoruldum",
   "user_text": "Biraz yoruldum",
-  "input_method": "quick_reply"
+  "input_method": "quick_reply",
+  "compiled_policy": {
+    "need": "rest",
+    "energy": "low",
+    "allowed_strategies": ["low_energy_reset", "sensory_break"],
+    "max_duration_minutes": 5,
+    "anchors": {
+      "activities": ["müzik"],
+      "low_energy_activities": ["bir şarkı dinlemek"]
+    }
+  }
 }
 ```
 
-For custom text or voice, `user_text` contains the user's own explanation instead of only a quick-state label.
-
-## Expected response
+## Internal response contract
 
 ```json
 {
-  "question": "Şu anda kısa bir dinlenme mi, yoksa otomatik bir kaydırma mı arıyorsun?",
-  "alternative": "Bir şarkı boyunca telefonu bırakıp biraz dinlenebilirsin."
+  "need": "rest",
+  "strategy": "low_energy_reset",
+  "question": "Şu an gerçekten dinlenmeye mi, yoksa otomatik kaydırmaya mı ihtiyacın var?",
+  "alternative": "Bir şarkı boyunca telefonu bırakıp yalnızca müzik dinlemeyi deneyebilirsin.",
+  "duration_minutes": 4,
+  "personalization_anchor": "müzik"
 }
 ```
 
-## Why this prompt is designed this way
+Only `question` and `alternative` are displayed. The other fields enable semantic validation.
 
-### The model does not choose the threshold
+## Semantic validation
 
-The daily limit is explicitly **user-defined**. Gemini receives the limit only as context and is forbidden from setting a new one or saying the user has used the app "too much."
+`AiCardSemanticValidator` verifies:
 
-This avoids turning a generative model into an authority over what amount of device use is healthy.
+- `need` matches the local policy;
+- strategy is permitted for that state;
+- duration is inside the local maximum;
+- the question is brief and ends as a question;
+- the alternative is concrete;
+- low-energy users are not given high-effort actions;
+- personalization anchors exactly match supplied anchors;
+- no invented live content appears;
+- intentional rest preserves user autonomy;
+- visible language passes the safety validator.
 
-### Current state matters as much as the profile
+## Repair message
 
-A static profile may say the user enjoys exercise, but recommending exercise when the user says they are exhausted may be inappropriate. The prompt therefore combines long-term preferences with the immediate state.
+If the first live response is parseable but invalid, the app makes at most one repair request:
 
-Example behavior:
+```text
+Repair one invalid Eşik intervention response.
+You will receive the authoritative compiled policy, the invalid JSON, and explicit validation errors.
+Return only a corrected JSON object using exactly these fields: need, strategy, question, alternative, duration_minutes, personalization_anchor.
+Do not add new personal facts or recommendations. Keep the same intended meaning when it is safe, but obey every policy constraint and validation error.
+Output Turkish. Do not explain the repair.
+```
 
-- `tired` -> prefer a low-energy alternative such as music, rest, water, or a short walk.
-- `procrastinating` -> suggest a very small first step toward a stated goal.
-- `relaxing` -> acknowledge intentional rest and help the user make it deliberate rather than automatically forcing them to stop.
-
-### Reflection before prescription
-
-The result contains both:
-
-1. a short **question**, and
-2. one **micro-alternative**.
-
-The question is intentionally open and uncertain. The app is meant to create a moment of awareness, not claim it knows exactly why the user opened an app.
-
-### Recommendations remain grounded
-
-The prompt prohibits inventing a new book, podcast, product, or live recommendation unless the user explicitly mentioned it. This reduces hallucination and keeps the intervention personally relevant.
-
-### Small outputs fit the product moment
-
-An overlay above another app is not the place for a paragraph of coaching. Character limits force the response into something the user can understand in a few seconds.
+A failed repair immediately falls back to deterministic local behavior.
 
 ---
 
-# 3. Daily reflection prompt
+# 4. Daily reflection
 
-## Purpose
+## Product purpose
 
-After at least seven intervention records are available for the day, Eşik can generate a short daily reflection.
+The application computes all counts and candidate patterns locally. Gemini contributes only:
 
-The application computes the objective numbers locally. Gemini receives those facts and the interaction records, then contributes only the interpretive layer:
+- one evidence-backed tentative question;
+- one two-to-five-minute experiment for tomorrow.
 
-- one tentative observation question;
-- one small experiment for tomorrow.
+The report remains unavailable below seven records.
 
-## System message
+## Local evidence summary
 
-```text
-You create a brief Turkish daily reflection from device-local interaction records.
-Numbers are computed by the application and must not be recalculated or embellished.
-Return JSON only with exactly two string fields: observation_question and micro_step.
-The observation must be phrased as a tentative question, never a diagnosis or causal claim.
-The micro_step must be one specific, realistic action for tomorrow.
-Never shame, moralize, set a threshold, or use language meaning too much or excessive.
-Only refer to patterns actually visible in the supplied records and profile.
-```
+`DailyReportEvidenceBuilder` calculates:
 
-## User message / dynamic payload
+- count by state;
+- continue and stop count by state;
+- states with at least two observations;
+- a unique dominant state when one exists;
+- a state with a meaningfully high continue ratio when sample size permits;
+- broad time-of-day bucket counts.
 
 A simplified example:
 
 ```json
 {
-  "target_app": "Instagram",
-  "usage_minutes": 104,
-  "user_limit_minutes": 30,
-  "intervention_count": 8,
-  "continued_count": 5,
-  "stopped_count": 3,
-  "goals": ["daha düzenli çalışmak", "daha çok kitap okumak"],
-  "records": [
+  "candidate_state_ids": ["procrastinating", "tired"],
+  "dominant_state_id": "procrastinating",
+  "higher_continue_state_id": "procrastinating",
+  "states": [
     {
-      "time": "11:12",
-      "state": "Bir şeyi erteliyorum",
-      "text": "çalışmaya başlamayı erteliyorum",
-      "choice": "continue",
-      "alternative": "Ertelediğin işin yalnızca ilk iki dakikasını yapabilirsin."
-    },
-    {
-      "time": "16:35",
-      "state": "Biraz yoruldum",
-      "text": "bugün yoruldum",
-      "choice": "continue",
-      "alternative": "Bir şarkı boyunca telefonu bırakıp gözlerini dinlendirebilirsin."
+      "state_id": "procrastinating",
+      "count": 3,
+      "continued_count": 2,
+      "stopped_count": 1
     }
-  ]
+  ],
+  "time_bucket_counts": {
+    "afternoon": 3,
+    "evening": 5
+  }
 }
 ```
 
-## Expected response
+## System message
+
+```text
+You create a brief Turkish daily reflection for Eşik from device-local interaction records and locally computed evidence aggregates.
+The application computes all numbers and candidate patterns. Do not recalculate, embellish, or infer a pattern that is absent from evidence_summary.
+
+Choose at most one evidence-backed pattern:
+- evidence_state_id must be an exact candidate state ID supplied in evidence_summary, or an empty string when evidence is mixed or weak.
+- The observation must be a tentative question, never a diagnosis, personality label, causal claim, or certainty.
+- The micro-step must be one specific two-to-five-minute experiment for tomorrow, grounded in a supplied goal or the selected evidence state.
+- Never shame, moralize, define a threshold, or use language meaning too much/excessive.
+- Do not invent facts, counts, activities, motives, or success claims.
+
+Return JSON only with exactly three string fields:
+- evidence_state_id
+- observation_question
+- micro_step
+
+Examples:
+Strong evidence: procrastinating appears repeatedly and has enough choices recorded.
+Good: ask whether starting difficulty and continuing may appear together, then suggest a two-minute first step.
+Bad: “You use Instagram because you procrastinate.”
+
+Mixed evidence with no adequate subgroup:
+Good: leave evidence_state_id empty and ask a broad question about which situations felt most intentional.
+Bad: manufacture a dominant trigger.
+```
+
+## Expected output
 
 ```json
 {
-  "observation_question": "'Bir şeyi erteliyorum' dediğin anlarda Instagram'a devam etme eğilimin daha sık görünüyor olabilir mi?",
-  "micro_step": "Yarın ilk erteleme anında çalışacağın işi yalnızca iki dakika açıp sonra yeniden karar ver."
+  "evidence_state_id": "procrastinating",
+  "observation_question": "Erteleme dediğin anlarda devam etme kararı daha sık görünmüş olabilir mi?",
+  "micro_step": "Yarın ilk erteleme anında işi iki dakika açıp sonra yeniden karar ver."
 }
 ```
 
-## Why this prompt is designed this way
-
-### Correlation is not causation
-
-The report may notice that certain states and decisions appear together, but Eşik does not have evidence that one causes the other.
-
-Therefore the prompt requires tentative question language rather than statements such as:
-
-> "Procrastination causes your Instagram use."
-
-A safer form is:
-
-> "Erteleme dediğin anlarda Instagram'a devam etme eğilimin daha sık görünüyor olabilir mi?"
-
-### Numerical facts are deterministic
-
-Gemini does not calculate:
-
-- total usage;
-- the user's limit;
-- intervention count;
-- continue count;
-- stop count.
-
-Those values are computed by application code. This reduces hallucinated statistics and makes the report auditable.
-
-### The report ends with an experiment, not a verdict
-
-Rather than assigning a label or making a broad behavioral claim, the model proposes one small action to test tomorrow. This keeps the product exploratory and user-controlled.
+`DailyReportSemanticValidator` rejects unsupported state IDs, causal certainty, generic advice, unsafe language, and micro-steps without a short duration.
 
 ---
 
-# Safety outside the prompts
+# 5. Reliability and privacy architecture
 
-Prompt wording alone is not treated as a sufficient safety mechanism.
+## Pre-request safety
 
-## Crisis short-circuit
+- Crisis-signaling text is detected locally.
+- A crisis signal prevents the Gemini call and any repair call.
+- The UI shows the local support route instead.
 
-Before sending relevant text to Gemini, the app checks for crisis/self-harm signals such as Turkish and English phrases including forms of:
+## Provider or network failure
 
-- `intihar`
-- `kendimi öldür...`
-- `kendime zarar...`
-- `yaşamak istemiyorum`
-- `suicide`
-- `suicidal`
-- `kill myself`
-- `want to die`
-- `self harm`
+The following all return deterministic local output:
 
-When detected, the external AI call is skipped and the user is shown a local support-oriented message.
-
-This is intentionally implemented in deterministic application logic rather than delegated to the generative model.
-
-## Output validation
-
-Generated profile fields, intervention text, and daily-report text are checked before display. Unsafe or disallowed language triggers the local fallback.
-
-## Offline / API failure fallback
-
-If Gemini is unavailable because of:
-
-- no API key;
-- no internet connection;
+- blank API key;
+- airplane mode;
 - timeout;
-- API error;
-- blocked response;
-- malformed JSON;
-- unsafe generated text;
+- HTTP/quota failure;
+- blocked generation;
+- malformed response;
+- invalid enum or JSON;
+- semantic validation failure;
+- failed repair.
 
-Eşik uses `MockAiGateway`, a deterministic Kotlin implementation that produces safe profile-based responses without another model.
+## Privacy-safe diagnostics
 
-This fallback is a reliability feature, not a second AI model.
+Debug logs include only:
 
----
+- task type;
+- model ID;
+- live, repaired, or fallback source;
+- high-level outcome category;
+- elapsed milliseconds.
 
-# Model and transport
+They never log biography text, free-form intervention text, crisis text, or API keys.
 
-For the hackathon prototype, Eşik uses the Gemini API directly from the Android application.
+## Prototype credential limitation
 
-Configured models:
-
-- fast profile/intervention model: `gemini-2.5-flash-lite`
-- daily-report model: `gemini-2.5-flash`
-
-The model names remain configurable through local properties.
-
-The API key is **not committed to GitHub** and is loaded from local ignored configuration. Direct mobile API-key usage is acceptable only for the hackathon prototype; a production version should use a backend proxy with server-held credentials and appropriate abuse controls.
-
----
-
-# Prompt iteration and evaluation
-
-The prompts were not treated as one-off text. During implementation, outputs were tested against different contexts and the surrounding deterministic logic was adjusted when failures appeared.
-
-Examples of issues the design explicitly addresses:
-
-- generic recommendations that ignore the user's current energy/state;
-- describing a person with a fixed behavioral label;
-- model-generated statements that imply diagnosis or causality;
-- the model attempting to judge the user's chosen screen-time limit;
-- fabricated content recommendations;
-- verbose responses that do not fit an overlay interaction;
-- malformed structured output;
-- crisis language reaching the external model;
-- loss of functionality when the API is unavailable.
-
-The final architecture therefore combines **prompt constraints + local pre-checks + output validation + deterministic fallback**, rather than relying on prompt wording alone.
+For the hackathon APK, the Gemini key is read from ignored `local.properties` into `BuildConfig`. This avoids committing the secret, but does not make a mobile APK a secure production credential store. A production release requires a backend proxy with server-held credentials.
 
 ---
 
-# Short report-ready explanation
+# 6. Model and generation configuration
 
-Eşik uses three task-specific zero-shot prompts rather than a general chatbot. The onboarding prompt converts the user's own free-form narrative into a schema-constrained personalization profile; the intervention prompt combines this profile with the user's current state and self-defined screen-time target to generate one brief reflection and one realistic micro-alternative; and the daily-report prompt turns local intervention records into a tentative pattern question and one experiment for the next day. All prompts require structured JSON output and explicitly prohibit diagnosis, shaming, threshold-setting, unsupported causal claims, and invented personalization. Objective usage statistics are computed by the application rather than by the model. Prompt-level safeguards are supplemented by local crisis detection, generated-language validation, and a deterministic offline fallback. This makes generative AI central to personalization and reflection while keeping safety-critical and factual decisions under deterministic application control.
+Defaults remain configurable without source changes:
+
+```properties
+GEMINI_FAST_MODEL=gemini-2.5-flash-lite
+GEMINI_PROFILE_MODEL=gemini-2.5-flash-lite
+GEMINI_CARD_MODEL=gemini-2.5-flash-lite
+GEMINI_REPORT_MODEL=gemini-2.5-flash
+```
+
+Current task settings:
+
+| Task | Temperature | Output limit | Structured schema |
+|---|---:|---:|---|
+| Profile | 0.15 | 900 | Yes, with compatibility fallback |
+| Card | 0.15 | 480 | Yes, with compatibility fallback |
+| Card repair | 0.0 | 420 | Yes, with compatibility fallback |
+| Report | 0.1 | 520 | Yes, with compatibility fallback |
+
+The final model choice must be based on the device scenario matrix in `docs/AI_EVALUATION.md`, considering quality, latency, fallback rate, and reliability.
+
+---
+
+# 7. Prompt iteration evidence
+
+Quality v2 was introduced to address concrete weaknesses observed in the first working version:
+
+| First-version weakness | Quality v2 response |
+|---|---|
+| Model inferred the entire intervention policy from a short prompt | Local state/energy/strategy compiler |
+| A tired user could receive an effort-heavy activity | Low-energy strategy restriction and validation |
+| Valid JSON could still be vague or state-inappropriate | Structured semantic fields and validator |
+| Personalization could invent activities | Profile grounding sanitizer and anchor validation |
+| Report received raw logs without explicit evidence | Local aggregates and candidate-state contract |
+| Prompt design was zero-shot only | Compact contrastive few-shot examples |
+| Any invalid output immediately became fallback | One bounded repair attempt, then fallback |
+| Debugging live vs fallback was unclear | Privacy-safe source/latency diagnostics |
+
+## Report-ready summary
+
+> Eşik decomposes generative AI into profile creation, moment-level intervention, and daily reflection. Before the intervention request, local Kotlin code compiles the user's state into an explicit need, energy expectation, allowed strategies, duration limit, and set of user-supplied personalization anchors. Gemini receives this constrained policy through a structured prompt containing compact contrastive examples and returns schema-constrained JSON. The application then performs semantic validation for state fit, grounding, actionability, duration, autonomy, and safety; one bounded repair request is permitted before deterministic fallback. Daily numerical facts and candidate patterns are computed locally, so the model only phrases one tentative reflection question and one small experiment. This design uses generative AI meaningfully while reducing hallucination, overclaiming, judgmental tone, and network-related failure.

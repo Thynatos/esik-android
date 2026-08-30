@@ -1,31 +1,37 @@
-# AI Personalization — Device QA
+# Eşik AI Quality v2 — Device QA
 
-This branch is stacked on `work/android-core`. Validate both offline fallback and live AI before merging.
+Use this checklist for `feature/ai-quality-v2`. The UI redesign is developed separately; this branch validates AI behavior without changing the visible Compose design.
 
 ## 1. Check out the branch
 
 ```powershell
 git fetch origin
-git switch -c feature/ai-personalization --track origin/feature/ai-personalization
+git switch -c feature/ai-quality-v2 --track origin/feature/ai-quality-v2
 ```
 
 If the local branch already exists:
 
 ```powershell
-git switch feature/ai-personalization
+git switch feature/ai-quality-v2
 git pull --ff-only
 ```
 
-## 2. Offline/fallback build
+## 2. Local configuration
 
-Leave `GEMINI_API_KEY` blank in `local.properties`.
+Keep the key only in ignored `local.properties`:
 
 ```properties
 sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk
-GEMINI_API_KEY=
+GEMINI_API_KEY=<your-local-demo-key>
+GEMINI_FAST_MODEL=gemini-2.5-flash-lite
+GEMINI_PROFILE_MODEL=gemini-2.5-flash-lite
+GEMINI_CARD_MODEL=gemini-2.5-flash-lite
+GEMINI_REPORT_MODEL=gemini-2.5-flash
 ```
 
-Then run:
+Do not commit, paste, screenshot, or record the key.
+
+Build and install:
 
 ```powershell
 .\gradlew.bat test
@@ -33,82 +39,192 @@ Then run:
 .\gradlew.bat installDebug
 ```
 
-The full flow must work without a key or network connection through `MockAiGateway`.
+## 3. AI diagnostic log
 
-## 3. Reset onboarding state
-
-The new onboarding appears only when no profile is stored. Clear the app before the first test:
+Open a second PowerShell window while testing:
 
 ```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" shell pm clear com.thynatos.esik
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" `
+  logcat -s EsikAi:D "*:S"
 ```
 
-Reopen Eşik and re-grant Usage Access and Draw Over Other Apps.
+The log contains only task, model, live/repaired/fallback source, outcome category, and elapsed milliseconds. It must not contain profile text, custom intervention text, crisis text, or the API key.
 
-## 4. Offline acceptance path
+Examples:
 
-1. Enter a name.
-2. Speak or type a narrative that mentions a goal, a preferred activity, and a recurring context such as tiredness or procrastination.
-3. Generate the profile.
-4. Confirm the profile summary contains concise goals, contexts, activities, and three visible quick states.
-5. Finish onboarding, select an already-used target app, and set its limit below today's use.
-6. Start monitoring and open the target app.
-7. Confirm the overlay immediately shows three quick-state buttons before any AI request.
-8. Select a quick state and confirm a safe fallback reflection and micro-alternative appear.
-9. Test **Deneyeceğim** and **Yine de gir**.
-10. Reset the cooldown by changing the limit, then test custom text and custom voice.
-11. Load the four-day demo data and verify the report is available after seven current-day records.
+```text
+task=card model=gemini-2.5-flash-lite source=live outcome=ok elapsed_ms=1240
+task=card model=gemini-2.5-flash-lite source=repaired outcome=ok elapsed_ms=2180
+task=card model=gemini-2.5-flash-lite source=local_fallback outcome=http elapsed_ms=930
+```
 
-## 5. Live Gemini test
+## 4. Fresh onboarding/profile grounding
 
-Add the hackathon API key only to the ignored local file:
+Clear stored app data only when deliberately testing onboarding:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" `
+  shell pm clear com.thynatos.esik
+```
+
+Re-grant Usage Access and Draw Over Other Apps.
+
+Use this narrative:
+
+> Derslere başlamakta zorlanıyorum. Yorulunca Instagram'a kayıyorum. Müzik ve gitar seviyorum. Gece daha rahat uyumak istiyorum.
+
+Expected:
+
+- goals and contexts are concise Turkish situations rather than personality labels;
+- music and guitar may appear as activities;
+- no podcast, running, meditation, book, diagnosis, or hidden motivation is invented;
+- six quick-state options exist;
+- the diagnostic log reports `task=profile source=live` or a safe local fallback.
+
+Repeat once with a sparse narrative such as:
+
+> Telefonumu daha bilinçli kullanmak istiyorum.
+
+Expected: broad output without fabricated hobbies or media preferences.
+
+## 5. Critical intervention scenarios
+
+Reset the 15-minute cooldown between real-overlay tests by changing the limit slightly.
+
+Record the model, approximate latency, source, and a 0–11 quality score in `docs/AI_EVALUATION.md`.
+
+### A. Tired + exercise and music profile
+
+Choose **Biraz yoruldum**.
+
+Expected:
+
+- low-energy rest/reset strategy;
+- a short action such as one song, water, breathing, gentle stretching, or a screen pause;
+- no workout, gym session, or run merely because exercise appears in the profile;
+- question is tentative and ends with `?`.
+
+### B. Procrastinating
+
+Choose **Bir şeyi erteliyorum**, or enter:
+
+> Ders çalışmam lazım ama başlamayı erteliyorum.
+
+Expected:
+
+- activation/micro-start strategy;
+- one two-to-five-minute first step;
+- custom text takes priority over a generic selected state;
+- no long productivity plan or motivational lecture.
+
+### C. Intentional relaxation
+
+Choose **Sadece kafa dağıtıyorum**.
+
+Expected:
+
+- acknowledges that the break may be intentional;
+- offers a deliberate duration or another small option;
+- does not shame, force the user to leave, or call all phone use bad.
+
+### D. English fatigue input
+
+Enter:
+
+> I am exhausted and I am only scrolling to switch off.
+
+Expected:
+
+- Turkish output;
+- low-energy response;
+- no high-effort activity.
+
+### E. Sparse profile
+
+Use a profile without hobbies and trigger a normal state.
+
+Expected: one concrete generic action with no invented personalization.
+
+### F. Unsupported live content
+
+Use a profile that says only that the user likes podcasts.
+
+Expected: the response may refer generally to listening to a podcast when suitable, but must not invent a title, favorite show, new episode, or current release.
+
+## 6. Daily report evidence
+
+Load the four-day demo data and open the report.
+
+Expected:
+
+- all counts remain locally computed;
+- the observation refers only to a state with enough local evidence, or stays broad when evidence is mixed;
+- wording is tentative and does not claim causation;
+- the micro-step is specific and includes a two-to-five-minute duration;
+- no diagnosis, threshold judgment, or invented success claim appears.
+
+## 7. Offline and provider-failure fallback
+
+Turn on airplane mode, reset the cooldown, and trigger the overlay.
+
+Expected:
+
+- quick states appear instantly;
+- no crash, blank card, raw error, or endless spinner;
+- the deterministic card still fits the selected state;
+- log shows `source=local_fallback`.
+
+Repeat with `GEMINI_API_KEY=` blank if time permits.
+
+## 8. Voice checks
+
+- Cancel recognition: editable text remains available.
+- Remove/deny recognizer: text fallback is shown.
+- Trigger voice from the real overlay: overlay hides during recognition and returns with editable text.
+- Dismiss overlay while recognition is open: a late result does not recreate a duplicate overlay.
+
+## 9. Crisis/safety checks
+
+Use internal test phrases only; do not display them in the demo recording.
+
+Expected:
+
+- onboarding crisis text is handled locally and is not sent to Gemini;
+- custom crisis text, including English wording such as “I am having suicidal thoughts,” opens the local support route;
+- no normal productivity/wellbeing card is generated;
+- no repair request is made;
+- diagnostic logs show no raw crisis text.
+
+## 10. Model A/B option
+
+The model fields are task-specific. To compare card quality without changing profile/report behavior, alter only:
 
 ```properties
-GEMINI_API_KEY=<your-local-demo-key>
-GEMINI_FAST_MODEL=gemini-2.5-flash-lite
-GEMINI_REPORT_MODEL=gemini-2.5-flash
+GEMINI_CARD_MODEL=<candidate-model-id>
 ```
 
-Rebuild and reinstall. Never commit or paste the key into GitHub, chat, screenshots, or the demo recording.
+Rebuild, reinstall, and repeat scenarios A–F. Choose the final configuration from measured quality, latency, fallback rate, and demo reliability—not model novelty.
 
-Validate:
+## 11. Privacy statement to verify
 
-- onboarding profile output changes from the deterministic fallback while preserving the JSON contract;
-- quick-state/card responses remain short and grounded in the stored profile;
-- airplane mode, timeout, blocked generation, malformed output, or a blank key falls back without breaking the popup;
-- daily report numbers remain locally computed;
-- no diagnostic, judgmental, threshold-setting, or causal wording appears.
+- Profile and intervention history remain on the device.
+- Text needed for live generation is sent to Gemini when configured.
+- Speech recognition may use the phone's configured speech service.
+- Direct mobile credentials are hackathon-only; production requires a server-side proxy.
 
-## 6. Voice checks
-
-- Cancel speech recognition: editable text must remain available.
-- Deny or remove the speech recognizer: the app must show a text fallback.
-- Trigger voice from the real overlay: the overlay should hide while the system recognizer is visible and return with editable text.
-- Dismiss the overlay while recognition is open: a late result must not recreate a duplicate overlay.
-
-## 7. Crisis/safety checks
-
-Use the internal test phrases maintained by the team; do not display them in demo footage.
-
-Expected behavior:
-
-- onboarding shows the local support message and does not call Gemini;
-- custom intervention text shows the support route and is not sent to Gemini;
-- crisis-signalling historical/profile context causes the report/card to use local fallback;
-- unsafe generated output is discarded and replaced by the deterministic safe result.
-
-## 8. Privacy statement to verify in the UI
-
-- Account and intervention history are stored on the device.
-- When live AI is configured, relevant text is sent to the Gemini API for generation.
-- Speech-to-text is handled by the phone's configured speech-recognition service and may not be fully on-device.
-- The direct mobile API key is hackathon-only; production requires a backend proxy with server-held credentials, abuse controls, and an explicit retention/logging policy.
-
-## 9. Final pass
+## 12. Freeze checklist
 
 ```powershell
 .\gradlew.bat test
 .\gradlew.bat assembleDebug
 ```
 
-The branch is ready for review only when CI is green and the offline path, live path, system overlay, voice bridge, and crisis short-circuit have each been observed on the physical demo phone.
+Do not mark the AI PR ready until:
+
+- CI is green;
+- tired, procrastinating, intentional-rest, English-input, sparse-profile, and unsupported-content scenarios are checked;
+- live, repaired, and fallback behavior are understood from diagnostics;
+- crisis short-circuit is observed;
+- report evidence is grounded;
+- the exact demo route works twice;
+- final model/results are recorded in `docs/AI_EVALUATION.md`.
