@@ -77,7 +77,20 @@ internal data class StructuredAiCard(
     val personalizationAnchor: String,
 )
 
+internal data class StructuredDailyReflection(
+    val evidenceStateId: String,
+    val observationQuestion: String,
+    val microStep: String,
+)
+
 internal data class CardValidationResult(
+    val errors: List<String>,
+) {
+    val isValid: Boolean
+        get() = errors.isEmpty()
+}
+
+internal data class ReportValidationResult(
     val errors: List<String>,
 ) {
     val isValid: Boolean
