@@ -28,7 +28,8 @@ import java.time.ZoneId
  */
 class GeminiAiGateway(
     apiKey: String = BuildConfig.GEMINI_API_KEY,
-    private val fastModel: String = BuildConfig.GEMINI_FAST_MODEL,
+    private val profileModel: String = BuildConfig.GEMINI_PROFILE_MODEL,
+    private val cardModel: String = BuildConfig.GEMINI_CARD_MODEL,
     private val reportModel: String = BuildConfig.GEMINI_REPORT_MODEL,
     private val fallback: AiGateway = MockAiGateway(),
     private val client: GeminiMessageClient = GeminiMessageClient(apiKey),
@@ -36,28 +37,38 @@ class GeminiAiGateway(
     override suspend fun generateProfile(intake: ProfileIntake): PersonalizationProfile {
         val startedAt = SystemClock.elapsedRealtime()
         if (!client.isConfigured) {
-            debugResult(TASK_PROFILE, fastModel, startedAt, SOURCE_FALLBACK, "not_configured")
+            debugResult(TASK_PROFILE, profileModel, startedAt, SOURCE_FALLBACK, "not_configured")
             return fallback.generateProfile(intake)
         }
         if (containsCrisisSignal(intake.externalText())) {
-            debugResult(TASK_PROFILE, fastModel, startedAt, SOURCE_FALLBACK, "crisis_short_circuit")
+            debugResult(
+                TASK_PROFILE,
+                profileModel,
+                startedAt,
+                SOURCE_FALLBACK,
+                "crisis_short_circuit",
+            )
             return fallback.generateProfile(intake)
         }
 
         return try {
             val fallbackProfile = fallback.generateProfile(intake)
             val completion = completeJsonWithSchemaFallback(
-                model = fastModel,
+                model = profileModel,
                 systemPrompt = AiPrompts.PROFILE_SYSTEM_PROMPT,
                 userPrompt = profileInputJson(intake).toString(2),
                 maxTokens = 900,
                 temperature = 0.15,
                 responseSchema = PROFILE_RESPONSE_SCHEMA,
             )
-            val profile = parseProfile(completion.text).withFallbackDefaults(fallbackProfile)
+            val profile = ProfileGroundingSanitizer.sanitize(
+                intake = intake,
+                generated = parseProfile(completion.text),
+                fallback = fallbackProfile,
+            ).withFallbackDefaults(fallbackProfile)
             debugResult(
                 TASK_PROFILE,
-                fastModel,
+                profileModel,
                 startedAt,
                 SOURCE_LIVE,
                 if (completion.schemaFallbackUsed) "ok_without_schema" else "ok",
@@ -66,7 +77,7 @@ class GeminiAiGateway(
         } catch (error: Exception) {
             debugResult(
                 TASK_PROFILE,
-                fastModel,
+                profileModel,
                 startedAt,
                 SOURCE_FALLBACK,
                 failureCategory(error),
@@ -89,18 +100,24 @@ class GeminiAiGateway(
             profile.personalization.lowEnergyActivities.joinToString(" "),
         ).joinToString(" ")
         if (!client.isConfigured) {
-            debugResult(TASK_CARD, fastModel, startedAt, SOURCE_FALLBACK, "not_configured")
+            debugResult(TASK_CARD, cardModel, startedAt, SOURCE_FALLBACK, "not_configured")
             return fallback.generateCard(profile, currentUsageMinutes, input)
         }
         if (containsCrisisSignal(externalContext)) {
-            debugResult(TASK_CARD, fastModel, startedAt, SOURCE_FALLBACK, "crisis_short_circuit")
+            debugResult(
+                TASK_CARD,
+                cardModel,
+                startedAt,
+                SOURCE_FALLBACK,
+                "crisis_short_circuit",
+            )
             return fallback.generateCard(profile, currentUsageMinutes, input)
         }
 
         val policy = InterventionContextBuilder.build(profile, input)
         return try {
             val completion = completeJsonWithSchemaFallback(
-                model = fastModel,
+                model = cardModel,
                 systemPrompt = AiPrompts.CARD_SYSTEM_PROMPT,
                 userPrompt = cardInputJson(profile, currentUsageMinutes, input, policy).toString(2),
                 maxTokens = 480,
@@ -114,29 +131,25 @@ class GeminiAiGateway(
             if (firstCard != null && firstValidation.isValid) {
                 debugResult(
                     TASK_CARD,
-                    fastModel,
+                    cardModel,
                     startedAt,
                     SOURCE_LIVE,
                     if (completion.schemaFallbackUsed) "ok_without_schema" else "ok",
                 )
                 firstCard.toVisibleCard()
             } else {
-                val repaired = if (completion.schemaFallbackUsed) {
-                    null
-                } else {
-                    repairCard(
-                        invalidResponse = completion.text,
-                        policy = policy,
-                        validationErrors = firstValidation.errors,
-                    )
-                }
+                val repaired = repairCard(
+                    invalidResponse = completion.text,
+                    policy = policy,
+                    validationErrors = firstValidation.errors,
+                )
                 if (repaired != null) {
-                    debugResult(TASK_CARD, fastModel, startedAt, SOURCE_REPAIRED, "ok")
+                    debugResult(TASK_CARD, cardModel, startedAt, SOURCE_REPAIRED, "ok")
                     repaired.toVisibleCard()
                 } else {
                     debugResult(
                         TASK_CARD,
-                        fastModel,
+                        cardModel,
                         startedAt,
                         SOURCE_FALLBACK,
                         firstValidation.errors.firstOrNull() ?: "invalid_live_output",
@@ -147,7 +160,7 @@ class GeminiAiGateway(
         } catch (error: Exception) {
             debugResult(
                 TASK_CARD,
-                fastModel,
+                cardModel,
                 startedAt,
                 SOURCE_FALLBACK,
                 failureCategory(error),
@@ -180,7 +193,13 @@ class GeminiAiGateway(
             return fallback.generateDailyReport(profile, records, currentUsageMinutes)
         }
         if (containsCrisisSignal(externalContext)) {
-            debugResult(TASK_REPORT, reportModel, startedAt, SOURCE_FALLBACK, "crisis_short_circuit")
+            debugResult(
+                TASK_REPORT,
+                reportModel,
+                startedAt,
+                SOURCE_FALLBACK,
+                "crisis_short_circuit",
+            )
             return fallback.generateDailyReport(profile, records, currentUsageMinutes)
         }
 
@@ -247,8 +266,8 @@ class GeminiAiGateway(
         policy: InterventionPolicy,
         validationErrors: List<String>,
     ): StructuredAiCard? = runCatching {
-        val repairedRaw = client.complete(
-            model = fastModel,
+        val completion = completeJsonWithSchemaFallback(
+            model = cardModel,
             systemPrompt = AiPrompts.CARD_REPAIR_SYSTEM_PROMPT,
             userPrompt = repairInputJson(
                 invalidResponse = invalidResponse,
@@ -259,7 +278,7 @@ class GeminiAiGateway(
             temperature = 0.0,
             responseSchema = CARD_RESPONSE_SCHEMA,
         )
-        val repaired = parseStructuredCard(repairedRaw)
+        val repaired = parseStructuredCard(completion.text)
         repaired.takeIf { AiCardSemanticValidator.validate(it, policy).isValid }
     }.getOrNull()
 
