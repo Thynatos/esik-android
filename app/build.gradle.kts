@@ -33,7 +33,7 @@ val geminiCardModel = localProperties.getProperty(
 )
 val geminiReportModel = localProperties.getProperty(
     "GEMINI_REPORT_MODEL",
-    "gemini-2.5-flash",
+    "gemini-3.6-flash",
 )
 
 android {
