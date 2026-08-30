@@ -19,7 +19,7 @@ data class UserProfile(
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
 ) {
     companion object {
-        const val CURRENT_SCHEMA_VERSION: Int = 3
+        const val CURRENT_SCHEMA_VERSION: Int = 4
     }
 }
 
@@ -172,6 +172,10 @@ data class InterventionRecord(
     val aiActivityTitle: String = "",
     val aiDurationMinutes: Int = 0,
     val aiStrategy: String = "",
+    /** Context Eşik tentatively offered before the user selected a state, if any. */
+    val hypothesisStateId: String = "",
+    /** True/false only when the hypothesis was explicitly confirmed/rejected; null means none. */
+    val hypothesisAccepted: Boolean? = null,
 ) {
     fun localTime(zoneId: ZoneId = ZoneId.systemDefault()): String =
         TIME_FORMATTER.format(Instant.ofEpochMilli(timestampEpochMillis).atZone(zoneId))
