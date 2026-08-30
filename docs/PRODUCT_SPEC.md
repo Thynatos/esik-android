@@ -6,11 +6,11 @@ Eşik is an Android digital-wellbeing app that creates a short personalized paus
 
 ## Product principles
 
-1. **The threshold belongs to the user.** Eşik and Gemini never define what “too much” means.
-2. **Context before advice.** The intervention asks what is happening now instead of treating all high-use moments as the same.
+1. **The threshold belongs to the user.** Eşik and Gemini never define what “too much” means, and usage patterns never create an intervention by themselves.
+2. **Context before advice.** Once the user-defined threshold has fired, Eşik may use recent on-device usage shape to offer a tentative context in one tap; otherwise it asks what is happening now.
 3. **AI supports a decision; it does not make the decision.** Intentional rest/use is allowed.
 4. **No diagnosis or person-labeling.** Eşik does not diagnose addiction, mental-health conditions, personality, or motives.
-5. **Local facts stay local where possible.** Usage, records, numeric report facts, and the crisis gate are device-side.
+5. **Local facts stay local where possible.** Usage, records, numeric report facts, context inference, calibration, and the crisis gate are device-side.
 6. **Failure must remain usable.** Provider/network/validation failure returns a deterministic local card.
 
 ## Product surfaces
@@ -53,7 +53,7 @@ Home shows:
 - monitoring state;
 - required Usage Access / overlay permission repair when needed;
 - optional Android 13+ notification permission so background monitoring is visible in the notification area;
-- threshold editing;
+- threshold editing, including user-selected preset chips and custom values;
 - daily-report entry with a visible loading state;
 - a visible local-data section with destructive confirmation;
 - discreet developer/demo controls for the hackathon build.
@@ -67,7 +67,39 @@ The intervention exists in two presentations:
 - Compose screen for direct testing;
 - real `TYPE_APPLICATION_OVERLAY` above the selected target app.
 
-Initial question:
+The **only runtime trigger** is:
+
+```text
+local usage >= the daily threshold chosen by the user
+```
+
+After a successful overlay display, the monitor uses the existing 15-minute cooldown. Recent usage patterns do not bypass the threshold, create a second cooldown, or independently decide that the user should be interrupted.
+
+#### Optional one-tap context reading
+
+After threshold eligibility has already been established, the app may inspect recent `UsageEvents` locally to reduce friction in the context question. Session/open-count data is context only and is never sent to Gemini.
+
+The analyzer currently supports two deliberately conservative hypotheses:
+
+- `habit` — supported by at least two observable signals such as a genuine quick reopen, several opens in a short window, or repeatedly very short sessions;
+- `late_night` — only when the local time is late and the device has also been in sustained use.
+
+Eşik does **not** infer procrastination, boredom, fatigue, overwhelm, low motivation, or other motives from usage events alone.
+
+To reduce Android false positives, adjacent PAUSED/RESUMED transitions inside the same package are coalesced when separated by at most five seconds and no screen-off event occurred. A real leave/reopen normally includes another foreground package and remains a separate session.
+
+When a supported hypothesis has enough evidence, the overlay asks for one tap instead of starting with an open question, for example:
+
+> Bu, “Alışkanlıkla açtım” gibi görünüyor. Öyle mi?
+
+- **Evet, öyle** uses that canonical state as the current context.
+- **Hayır, başka bir şey** returns to the normal quick-state/text/voice choices.
+- A dismissed overlay is not counted as a rejection.
+- Explicit yes/no answers are stored locally.
+- After at least three answers for a state, a hypothesis whose recent acceptance ratio is at or below 0.34 is no longer offered; Eşik falls back to asking.
+- At most the latest 30 explicit answers per state are used for calibration.
+
+If there is not enough evidence, or calibration suppresses the guess, the initial question remains:
 
 > Şu an seni burada tutan ne?
 
@@ -91,7 +123,7 @@ For normal input, the app locally compiles:
 - allowed user-supplied personalization anchors;
 - forbidden recommendation patterns.
 
-Gemini returns a structured internal card containing need, strategy, question, alternative, duration, and personalization anchor. Application-side validation checks policy fit, grounding, actionability, duration, tone, and safety. One bounded repair attempt is allowed; otherwise the deterministic local gateway is used.
+Gemini returns a structured internal card containing need, strategy, reflection, question, activity title, alternative, duration, and personalization anchor. Application-side validation checks policy fit, grounding, actionability, duration, tone, safety, and near-duplicate recent history. One bounded repair attempt is allowed; otherwise the deterministic local gateway is used.
 
 Visible output contains:
 
@@ -103,56 +135,6 @@ Final decisions:
 
 - **Bunu deneyeceğim** — save a stopped/try-alternative decision and leave the target-app moment;
 - **Yine de devam et** — save an intentional continue decision and dismiss the overlay.
-
-After a successful overlay display, the monitor uses a 15-minute cooldown.
-
-#### When an intervention is offered
-
-The user's own threshold remains the primary trigger and behaves exactly as before. In addition, the
-monitor may offer a pause during a difficult moment before the threshold is reached, because total
-minutes describe an amount rather than a situation: an hour of deliberate viewing is not the same as
-twelve minutes of opening and closing the same app.
-
-| Trigger | Condition |
-|---|---|
-| `threshold` | Local usage reached the user-defined limit |
-| `immediate_reopen` | The target app was reopened within 30 seconds of being left |
-| `rapid_reopen_loop` | Three or more opens of the target app within ten minutes |
-| `session_drift` | The current session is at least three times the user's own median session |
-
-Pattern triggers are deliberately hard to fire, because an interruption at the wrong moment costs
-more trust than one that never happens:
-
-- nothing fires below ten minutes of use that day;
-- they have their own 45-minute cooldown, separate from the threshold cooldown;
-- at most two pattern interventions per local day;
-- the target app must be in the foreground;
-- the session-drift baseline is ignored until at least five completed sessions exist.
-
-A pattern trigger never changes the threshold, and the user's threshold is never inferred from
-behaviour.
-
-#### Reading the situation before asking
-
-Typing at a difficult moment is the highest-friction thing the product can ask for. When behaviour
-is unambiguous enough, Eşik offers its reading of the situation and asks for one tap instead:
-
-> Bu, "Biraz yoruldum" gibi görünüyor. Öyle mi?
-
-Rules:
-
-- the guess is produced by transparent local rules, not a model, and every rule carries the reason
-  it fired;
-- at least two independent supporting signals are required, otherwise the open question is shown;
-- **Hayır, başka bir şey** returns to the normal quick-state list, and the rejection is recorded;
-- the app measures its own hit rate per state from those answers and stops offering a guess it keeps
-  getting wrong;
-- signals are read on the device, interpreted on the device, and never sent anywhere;
-- no additional Android permission is used: the signals come from the usage-access data the user
-  already granted, plus the clock and charging state.
-
-The guess is a situation offered as a question. It is never a statement about the person, and never
-applied silently.
 
 ### 4. Daily report
 
@@ -188,11 +170,13 @@ onboarding
   -> target app is foreground
   -> screen is active/unlocked
   -> overlay permission available
-  -> local usage >= user threshold, or a behavioural pattern trigger fires
-  -> matching cooldown expired
-  -> local signals interpreted into an optional one-tap guess
+  -> local usage >= user threshold
+  -> existing 15-minute cooldown expired
+  -> recent UsageEvents optionally summarized on-device
+  -> conservative optional habit/late-night hypothesis
+  -> rejected hypotheses may be suppressed by local calibration
   -> real overlay appears
-  -> confirmed guess / quick state / text / voice context
+  -> confirmed guess OR quick state / text / voice context
   -> local crisis gate
   -> local intervention policy compiler
   -> Gemini structured card OR deterministic fallback
@@ -209,7 +193,7 @@ The Compose intervention and report screens also route Android system Back to Ho
 | Task | Validated demo model | What the model is allowed to do |
 |---|---|---|
 | Profile structuring | `gemini-2.5-flash-lite` | Structure supplied onboarding evidence into constrained profile fields |
-| Intervention card | `gemini-2.5-flash-lite` | Write one short question + one policy-compatible micro-alternative |
+| Intervention card | `gemini-2.5-flash-lite` | Write a grounded reflection/question + one policy-compatible micro-alternative |
 | Daily reflection | `gemini-3.6-flash` | Write one cautious evidence-backed question + one small next-day experiment |
 
 Models remain configurable through ignored `local.properties`.
@@ -237,8 +221,11 @@ Stored locally:
 - target app/package and threshold;
 - personalization profile;
 - intervention records;
-- generated visible question/alternative text;
+- generated visible card fields;
+- optional context hypothesis ID and explicit yes/no confirmation;
 - monitoring/cooldown preferences.
+
+Raw usage-event signals used for context inference are interpreted locally and are not persisted or sent to Gemini.
 
 The profile/records file and monitoring preferences are excluded from Android cloud backup and device transfer.
 
@@ -252,6 +239,8 @@ The Gemini API key is never committed, but the hackathon-only mobile-direct arch
 |---|---|
 | Judgment/shame | prompt constraints, local policy, banned-language/display validator, deterministic fallback |
 | Medical framing | no diagnosis/person labels; tentative questions only |
+| Over-inference from usage | threshold remains user-owned; hypotheses limited to habit/late-night, require multiple signals, require confirmation, and self-suppress after repeated rejection |
+| Android Activity false reopens | short adjacent same-package transitions are coalesced before session analysis |
 | Overclaiming | local evidence aggregation; no report below seven records; report semantic validation |
 | Crisis language | local crisis gate; no normal Gemini/repair request |
 | Hallucinated personalization | profile grounding sanitizer + allowed anchor checks |
