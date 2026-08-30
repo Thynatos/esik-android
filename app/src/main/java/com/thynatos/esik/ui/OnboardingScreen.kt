@@ -7,26 +7,25 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,7 +35,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.thynatos.esik.ai.AiGateway
@@ -46,6 +47,13 @@ import com.thynatos.esik.data.PersonalizationProfile
 import com.thynatos.esik.data.ProfileIntake
 import com.thynatos.esik.data.UserProfile
 import com.thynatos.esik.permissions.LaunchableApp
+import com.thynatos.esik.ui.components.EsikCard
+import com.thynatos.esik.ui.components.EsikScreen
+import com.thynatos.esik.ui.components.EsikTopBar
+import com.thynatos.esik.ui.components.PrimaryActionButton
+import com.thynatos.esik.ui.components.SectionTitle
+import com.thynatos.esik.ui.components.StatusPill
+import com.thynatos.esik.ui.theme.EsikSpacing
 import com.thynatos.esik.voice.SpeechInput
 import kotlinx.coroutines.launch
 
@@ -69,6 +77,7 @@ fun OnboardingScreen(
     var generatedProfile by remember { mutableStateOf<PersonalizationProfile?>(null) }
     var isGeneratingProfile by remember { mutableStateOf(false) }
     var profileMessage by remember { mutableStateOf<String?>(null) }
+    var showOptionalDetails by rememberSaveable { mutableStateOf(false) }
 
     val initialTarget = remember(installedApps) {
         installedApps.firstOrNull { it.packageName == "com.instagram.android" }
@@ -149,227 +158,328 @@ fun OnboardingScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Eşik", style = MaterialTheme.typography.headlineLarge)
-        Text(
-            "Hesap yok. Kayıtlar cihazında tutulur. Canlı AI açıksa ilgili metin Gemini API'ye; sesli giriş ise telefonundaki konuşma tanıma hizmetine gönderilebilir.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        OutlinedTextField(
-            value = name,
-            onValueChange = {
-                name = it
-                generatedProfile = null
-            },
-            label = { Text("İsim") },
-            isError = attemptedSubmit && name.isBlank(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = department,
-            onValueChange = {
-                department = it
-                generatedProfile = null
-            },
-            label = { Text("Bölüm / alan — isteğe bağlı") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Text("Seni biraz tanıyalım", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "Telefonu neden daha bilinçli kullanmak istediğini, boş zamanlarında neleri sevdiğini ve son zamanlarda seni neyin zorladığını anlat.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        OutlinedTextField(
-            value = biography,
-            onValueChange = {
-                biography = it
-                generatedProfile = null
-                profileMessage = null
-            },
-            label = { Text("Konuşarak ya da yazarak anlat") },
-            minLines = 5,
-            maxLines = 10,
-            isError = attemptedSubmit && biography.isBlank(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+    EsikScreen {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = EsikSpacing.xLarge, vertical = EsikSpacing.xxLarge),
+            verticalArrangement = Arrangement.spacedBy(EsikSpacing.xLarge),
         ) {
-            Button(
-                onClick = {
-                    profileMessage = null
-                    try {
-                        voiceLauncher.launch(
-                            SpeechInput.createIntent("Kendinden ve hedeflerinden bahset"),
-                        )
-                    } catch (_: ActivityNotFoundException) {
-                        profileMessage = "Bu telefonda sesli giriş kullanılamıyor; metinle devam edebilirsin."
-                    }
+            EsikTopBar(
+                title = "Sana göre bir başlangıç",
+                subtitle = "Eşik, kendi hedefin geldiğinde kısa bir durak sunar.",
+            )
+
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+            ) {
+                Text(
+                    text = "Hesap yok. Kayıtların cihazında kalır. Canlı AI açıksa yalnızca ilgili anlatım metni Gemini API'ye gönderilir.",
+                    modifier = Modifier.padding(EsikSpacing.large),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            SectionTitle(
+                title = "Önce seni tanıyalım",
+                supportingText = "İsmini ve kendi cümlelerinle kısa bir anlatımı ekle.",
+            )
+            OutlinedTextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    generatedProfile = null
                 },
-                modifier = Modifier.weight(1f),
+                label = { Text("İsim · gerekli") },
+                isError = attemptedSubmit && name.isBlank(),
+                supportingText = if (attemptedSubmit && name.isBlank()) {
+                    { Text("Devam etmek için ismini yaz.") }
+                } else {
+                    null
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            EsikCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall)) {
+                        Text(
+                            "Kendi cümlelerinle anlat",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Text(
+                            "Telefonu neden daha bilinçli kullanmak istediğini, boş zamanlarında neleri sevdiğini ve son günlerde seni neyin zorladığını anlat.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    PrimaryActionButton(
+                        text = "Sesle anlat",
+                        onClick = {
+                            profileMessage = null
+                            try {
+                                voiceLauncher.launch(
+                                    SpeechInput.createIntent("Kendinden ve hedeflerinden bahset"),
+                                )
+                            } catch (_: ActivityNotFoundException) {
+                                profileMessage = "Bu telefonda sesli giriş kullanılamıyor; metinle devam edebilirsin."
+                            }
+                        },
+                    )
+                    OutlinedTextField(
+                        value = biography,
+                        onValueChange = {
+                            biography = it
+                            generatedProfile = null
+                            profileMessage = null
+                        },
+                        label = { Text("Yazarak anlat · gerekli") },
+                        placeholder = { Text("Örn. Akşamları dinlenmek için telefona yöneliyorum…") },
+                        minLines = 5,
+                        maxLines = 10,
+                        isError = attemptedSubmit && biography.isBlank(),
+                        supportingText = if (attemptedSubmit && biography.isBlank()) {
+                            { Text("Devam etmek için birkaç cümle ekle.") }
+                        } else {
+                            { Text("Sesli anlatımın burada görünür; göndermeden önce düzenleyebilirsin.") }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showOptionalDetails = !showOptionalDetails },
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surface,
             ) {
-                Text("🎙 Anlat")
-            }
-            OutlinedButton(
-                onClick = { biography = biography.trim() },
-                modifier = Modifier.weight(1f),
-            ) {
-                Text("✏️ Yazarak devam")
-            }
-        }
-
-        OutlinedTextField(
-            value = hobbiesText,
-            onValueChange = {
-                hobbiesText = it
-                generatedProfile = null
-            },
-            label = { Text("Sevdiğin aktiviteler — isteğe bağlı") },
-            supportingText = { Text("Örn. gitar, koşu, kitap, podcast") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = improvementArea,
-            onValueChange = {
-                improvementArea = it
-                generatedProfile = null
-            },
-            label = { Text("Geliştirmek istediğin alan — isteğe bağlı") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = reason,
-            onValueChange = {
-                reason = it
-                generatedProfile = null
-            },
-            label = { Text("Kendi hedefin — isteğe bağlı kısa cümle") },
-            supportingText = { Text("Örn. gece daha rahat uyumak istiyorum") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Button(
-            onClick = { generateProfile() },
-            enabled = valid && !isGeneratingProfile,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (isGeneratingProfile) {
-                CircularProgressIndicator(modifier = Modifier.height(22.dp), strokeWidth = 2.dp)
-            } else {
-                Text("AI profilimi oluştur")
-            }
-        }
-        profileMessage?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall)
-        }
-
-        generatedProfile?.let { personalization ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Profil özeti", style = MaterialTheme.typography.titleMedium)
-                    ProfileLine("Hedefler", personalization.goals)
-                    ProfileLine("Sık karşılaşılan durumlar", personalization.recurringContexts)
-                    ProfileLine("Sana uygun alternatifler", personalization.preferredActivities)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("İsteğe bağlı ayrıntılar", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Profili daha kişisel hale getirir.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
-                        "Hızlı seçenekler: " + personalization.quickStatesOrDefault()
-                            .take(3)
-                            .joinToString(" · ") { option ->
+                        if (showOptionalDetails) "Kapat" else "Ekle",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            if (showOptionalDetails) {
+                EsikCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.medium)) {
+                        OutlinedTextField(
+                            value = department,
+                            onValueChange = {
+                                department = it
+                                generatedProfile = null
+                            },
+                            label = { Text("Bölüm / alan") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = hobbiesText,
+                            onValueChange = {
+                                hobbiesText = it
+                                generatedProfile = null
+                            },
+                            label = { Text("Sevdiğin aktiviteler") },
+                            supportingText = { Text("Örn. gitar, koşu, kitap, podcast") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = improvementArea,
+                            onValueChange = {
+                                improvementArea = it
+                                generatedProfile = null
+                            },
+                            label = { Text("Geliştirmek istediğin alan") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = reason,
+                            onValueChange = {
+                                reason = it
+                                generatedProfile = null
+                            },
+                            label = { Text("Kendi hedefin") },
+                            supportingText = { Text("Örn. gece daha rahat uyumak istiyorum") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            PrimaryActionButton(
+                text = if (isGeneratingProfile) "Profil hazırlanıyor" else "Profilimi hazırla",
+                onClick = { generateProfile() },
+                enabled = valid && !isGeneratingProfile,
+                leadingContent = if (isGeneratingProfile) {
+                    {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(EsikSpacing.small))
+                    }
+                } else {
+                    null
+                },
+            )
+            profileMessage?.let { message ->
+                EsikCard(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            generatedProfile?.let { personalization ->
+                SectionTitle(
+                    title = "Profil özeti",
+                    supportingText = "Kendi anlattıklarından hazırlanan bir başlangıç noktası.",
+                )
+                EsikCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
+                        ProfileTags("Hedeflerin", personalization.goals)
+                        ProfileTags("Karşılaşabileceğin durumlar", personalization.recurringContexts)
+                        ProfileTags("Sana uygun aktiviteler", personalization.preferredActivities)
+                        ProfileTags(
+                            label = "Hızlı seçeneklerin",
+                            values = personalization.quickStatesOrDefault().take(3).map { option ->
                                 listOf(option.emoji, option.label)
                                     .filter(String::isNotBlank)
                                     .joinToString(" ")
                             },
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        "Bu bir tanı değil; yalnızca kendi anlattıklarından çıkarılan düzenlenebilir bir başlangıç profili.",
-                        style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Bu bir tanı değil; yalnızca düzenlenebilir bir kişiselleştirme özetidir.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            SectionTitle(
+                title = "Hedefini ayarla",
+                supportingText = "Bir uygulama seç ve günlük dakika hedefini kendin belirle.",
+            )
+            EsikCard {
+                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Hedef uygulama · gerekli", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                targetAppLabel,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                targetPackage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = { showAppPicker = true }) {
+                            Text("Değiştir")
+                        }
+                    }
+                    OutlinedTextField(
+                        value = limitText,
+                        onValueChange = { limitText = it.filter(Char::isDigit).take(4) },
+                        label = { Text("Günlük hedef · dakika · gerekli") },
+                        supportingText = { Text("Eşik bu sayıyı önermez veya değiştirmez.") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = attemptedSubmit && (limit == null || limit <= 0),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
-        }
 
-        HorizontalDivider()
-        Text("Hedef uygulama", style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(
-            onClick = { showAppPicker = true },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Hedef uygulama: $targetAppLabel")
-        }
-        Text(targetPackage, style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(
-            value = limitText,
-            onValueChange = {
-                limitText = it.filter(Char::isDigit).take(4)
-            },
-            label = { Text("Günlük limit — dakika") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            isError = attemptedSubmit && (limit == null || limit <= 0),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        HorizontalDivider()
-        Text("İzinler", style = MaterialTheme.typography.titleMedium)
-        PermissionRow(
-            label = "Kullanım verisi erişimi",
-            granted = hasUsageAccess,
-            onClick = onOpenUsagePermission,
-        )
-        PermissionRow(
-            label = "Diğer uygulamaların üzerine çizme",
-            granted = canDrawOverlays,
-            onClick = onOpenOverlayPermission,
-        )
-
-        Spacer(Modifier.height(4.dp))
-        Button(
-            onClick = {
-                attemptedSubmit = true
-                if (valid) {
-                    val finish: (PersonalizationProfile) -> Unit = { personalization ->
-                        val finalReason = reason.trim().ifBlank {
-                            personalization.goals.firstOrNull().orEmpty().ifBlank {
-                                "Telefonu daha bilinçli kullanmak istiyorum"
-                            }
-                        }
-                        onComplete(
-                            UserProfile(
-                                name = name.trim(),
-                                department = department.trim(),
-                                hobbies = hobbies.ifEmpty {
-                                    personalization.preferredActivities.take(3)
-                                },
-                                improvementArea = improvementArea.trim().ifBlank {
-                                    personalization.goals.firstOrNull().orEmpty()
-                                },
-                                reason = finalReason,
-                                targetAppLabel = targetAppLabel,
-                                targetPackage = targetPackage,
-                                dailyLimitMinutes = requireNotNull(limit),
-                                biography = biography.trim(),
-                                personalization = personalization,
-                            ),
-                        )
-                    }
-                    generatedProfile?.let(finish) ?: generateProfile(finish)
+            SectionTitle(
+                title = "İzinleri tamamla",
+                supportingText = "Kullanım süresini okumak ve destek kartını göstermek için iki Android izni gerekir.",
+            )
+            EsikCard {
+                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
+                    SetupPermissionRow(
+                        label = "Kullanım verisi erişimi",
+                        explanation = "Yalnızca seçtiğin uygulamanın süresini okur.",
+                        granted = hasUsageAccess,
+                        onClick = onOpenUsagePermission,
+                    )
+                    SetupPermissionRow(
+                        label = "Ekran üstü kart",
+                        explanation = "Kendi hedefine ulaştığında müdahale kartını gösterir.",
+                        granted = canDrawOverlays,
+                        onClick = onOpenOverlayPermission,
+                    )
                 }
-            },
-            enabled = !isGeneratingProfile,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Başla")
+            }
+
+            PrimaryActionButton(
+                text = "Eşik'i kullanmaya başla",
+                onClick = {
+                    attemptedSubmit = true
+                    if (valid) {
+                        val finish: (PersonalizationProfile) -> Unit = { personalization ->
+                            val finalReason = reason.trim().ifBlank {
+                                personalization.goals.firstOrNull().orEmpty().ifBlank {
+                                    "Telefonu daha bilinçli kullanmak istiyorum"
+                                }
+                            }
+                            onComplete(
+                                UserProfile(
+                                    name = name.trim(),
+                                    department = department.trim(),
+                                    hobbies = hobbies.ifEmpty {
+                                        personalization.preferredActivities.take(3)
+                                    },
+                                    improvementArea = improvementArea.trim().ifBlank {
+                                        personalization.goals.firstOrNull().orEmpty()
+                                    },
+                                    reason = finalReason,
+                                    targetAppLabel = targetAppLabel,
+                                    targetPackage = targetPackage,
+                                    dailyLimitMinutes = requireNotNull(limit),
+                                    biography = biography.trim(),
+                                    personalization = personalization,
+                                ),
+                            )
+                        }
+                        generatedProfile?.let(finish) ?: generateProfile(finish)
+                    }
+                },
+                enabled = !isGeneratingProfile,
+            )
+            Text(
+                "İzinleri şimdi açmasan da kurulumu bitirebilir, daha sonra Ana Sayfa'dan tamamlayabilirsin.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 
@@ -391,10 +501,15 @@ fun OnboardingScreen(
                                         targetPackage = app.packageName
                                         showAppPicker = false
                                     }
-                                    .padding(vertical = 10.dp),
+                                    .padding(vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Text(app.label, style = MaterialTheme.typography.bodyLarge)
-                                Text(app.packageName, style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    app.packageName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
@@ -408,30 +523,58 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun ProfileLine(label: String, values: List<String>) {
-    if (values.isNotEmpty()) {
-        Text("$label: ${values.joinToString(" · ")}")
+private fun ProfileTags(label: String, values: List<String>) {
+    if (values.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.small)) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(EsikSpacing.small),
+            verticalArrangement = Arrangement.spacedBy(EsikSpacing.small),
+        ) {
+            values.forEach { value ->
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        value,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun PermissionRow(
+private fun SetupPermissionRow(
     label: String,
+    explanation: String,
     granted: Boolean,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(EsikSpacing.medium),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall),
+        ) {
+            Text(label, style = MaterialTheme.typography.titleSmall)
             Text(
-                if (granted) "Açık" else "Kapalı",
+                explanation,
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            StatusPill(
+                label = if (granted) "İzin açık" else "İzin gerekli",
+                active = granted,
             )
         }
-        OutlinedButton(onClick = onClick) {
+        TextButton(onClick = onClick) {
             Text(if (granted) "Ayarlar" else "İzin ver")
         }
     }
