@@ -16,6 +16,7 @@ The goal of this pass is to finish the current product and repository workflow f
 | Usage Access | PASS | Guided system-settings flow validated. |
 | Usage measurement | PASS | `UsageStatsManager` values validated against the selected target app. |
 | Foreground monitoring | PASS | Foreground service and 60-second polling validated. |
+| Monitoring notification | IMPLEMENTED | Android 13+ notification permission is requested contextually when monitoring starts, remains optional for core tracking, and can be repaired from Home. |
 | Threshold trigger | PASS | Real target-app trigger validated on physical Android hardware. |
 | Cooldown | PASS | 15-minute cooldown works; changing the limit resets it for testing. |
 | System overlay | PASS | `TYPE_APPLICATION_OVERLAY` appears above the target app and is usable on the physical phone. |
@@ -27,6 +28,7 @@ The goal of this pass is to finish the current product and repository workflow f
 | Repair/fallback | PASS | One repair attempt is bounded; deterministic local fallback remains usable offline. |
 | Intentional continuation | PASS | User can intentionally continue; no forced blocking. |
 | Stop/try alternative action | PASS | User can dismiss the target-app moment and return toward launcher/home. |
+| In-app navigation | IMPLEMENTED | Android system Back from Compose intervention/report returns Home rather than unexpectedly exiting the activity. |
 | Local records | PASS | Intervention records persist locally in app-private JSON storage. |
 | Daily report threshold | PASS | Live synthesis is withheld below seven records. |
 | Daily report counts | PASS | Numeric facts are computed locally. |
@@ -75,7 +77,7 @@ Confirmed:
 - both final decisions dismiss correctly;
 - seeded daily report opens and generates successfully.
 
-A finalization-only polish pass was added afterward (launcher/notification icons, report loading copy, visible/confirmed data deletion). After pulling the latest baseline, these visual changes need only a short smoke check; they do not alter the validated monitor/overlay/AI decision logic.
+A finalization-only polish pass was added afterward: launcher/notification icons, report loading state, visible/confirmed data deletion, standard system-Back routing, and Android 13+ monitoring-notification permission handling. After pulling the latest baseline, these additions need only a short smoke check; they do not change the validated threshold/overlay/AI decision logic.
 
 ## AI configuration used for the validated demo build
 
@@ -96,6 +98,7 @@ The current baseline intentionally includes these controls:
 - relevant context may be sent to Gemini only for live AI generation, as disclosed in onboarding;
 - sensitive persisted state excluded from Android backup/device transfer;
 - visible in-app local-data deletion with confirmation;
+- foreground tracking has explicit app/notification identity and optional notification permission;
 - no API key in source control;
 - crisis-signalling text bypasses Gemini;
 - AI never sets or recommends the usage threshold;
@@ -138,7 +141,7 @@ Current instructions are synchronized across `AGENTS.md`, `COPILOT_PROMPT.md`, `
 These are final release/submission tasks, not new product features:
 
 - keep GitHub Actions green after each integrated feature;
-- after the latest finalization polish, do one short install/visual smoke check for the new icons, report-loading state, and data-delete confirmation;
+- after the latest finalization polish, do one short install/visual smoke check for the launcher icon, monitoring notification/permission, report-loading state, data-delete confirmation, and system Back behavior;
 - update this document when a feature changes the validated demo route;
 - run the exact final demo route twice consecutively after the last optional feature is merged;
 - capture a backup screen recording of the final demo route;
@@ -152,7 +155,7 @@ These are final release/submission tasks, not new product features:
 The following are useful robustness work but are not blockers for the baseline and should not be mixed into product-feature work unless time remains:
 
 - OEM-specific background killing/battery restrictions;
-- notification-permission variations across Android/OEM versions;
+- OEM-specific notification-channel/task-manager presentation differences;
 - very long unattended service lifetime;
 - unusual clock/timezone transitions;
 - speech recognizer/provider-specific cancellation races;
