@@ -19,6 +19,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.thynatos.esik.ai.AiGateway
 import com.thynatos.esik.ai.CrisisFilter
+import com.thynatos.esik.ai.NeedHypothesis
 import com.thynatos.esik.ai.MockAiGateway
 import com.thynatos.esik.ai.SafetyLanguageValidator
 import com.thynatos.esik.data.AiCard
@@ -29,6 +30,7 @@ import com.thynatos.esik.data.InterventionRecord
 import com.thynatos.esik.data.JsonEsikRepository
 import com.thynatos.esik.data.UserChoice
 import com.thynatos.esik.data.UserProfile
+import com.thynatos.esik.usage.InterventionTrigger
 import com.thynatos.esik.voice.VoiceInputCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,8 +63,24 @@ class OverlayController(
     val isShowing: Boolean
         get() = overlayView != null
 
-    fun show(profile: UserProfile, usageMinutes: Int): Boolean {
+    fun show(
+        profile: UserProfile,
+        usageMinutes: Int,
+        trigger: InterventionTrigger = InterventionTrigger.THRESHOLD,
+        hypothesis: NeedHypothesis? = null,
+    ): Boolean {
         if (isShowing || !Settings.canDrawOverlays(appContext)) return false
+
+        // Null unless the user is asked to confirm a guess, so an unanswered moment is never
+        // recorded as a rejection.
+        var hypothesisAccepted: Boolean? = null
+        val hypothesisLabel = hypothesis?.let { guess ->
+            profile.personalization.quickStatesOrDefault()
+                .firstOrNull { it.id == guess.stateId }
+                ?.label
+                ?.takeIf(String::isNotBlank)
+                ?: guess.defaultLabel
+        }
 
         val root = FrameLayout(appContext).apply {
             setBackgroundColor(Color.argb(184, 16, 22, 19))
@@ -103,7 +121,19 @@ class OverlayController(
             letterSpacing = 0.08f
         }
         val headline = TextView(appContext).apply {
-            text = "${profile.targetAppLabel}: bugün $usageMinutes dakika. Kendi hedefin ${profile.dailyLimitMinutes} dakika."
+            text = when (trigger) {
+                InterventionTrigger.THRESHOLD ->
+                    "${profile.targetAppLabel}: bugün $usageMinutes dakika. Kendi hedefin ${profile.dailyLimitMinutes} dakika."
+
+                InterventionTrigger.IMMEDIATE_REOPEN ->
+                    "${profile.targetAppLabel} az önce kapanıp yeniden açıldı. Bugün $usageMinutes dakika oldu."
+
+                InterventionTrigger.RAPID_REOPEN_LOOP ->
+                    "Birkaç dakikadır ${profile.targetAppLabel} açılıp kapanıyor. Bugün $usageMinutes dakika oldu."
+
+                InterventionTrigger.SESSION_DRIFT ->
+                    "Bu oturum her zamankinden uzun sürüyor. Bugün $usageMinutes dakika oldu."
+            }
             textSize = 15f
             setTextColor(mutedInk)
         }
@@ -115,6 +145,10 @@ class OverlayController(
         }
         val choices = LinearLayout(appContext).apply {
             orientation = LinearLayout.VERTICAL
+        }
+        val hypothesisBlock = LinearLayout(appContext).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
         }
         val customActions = LinearLayout(appContext).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -154,6 +188,9 @@ class OverlayController(
         var customInputMethod = InterventionInputMethod.TEXT
 
         fun setControlsEnabled(enabled: Boolean) {
+            for (index in 0 until hypothesisBlock.childCount) {
+                hypothesisBlock.getChildAt(index).isEnabled = enabled
+            }
             for (index in 0 until choices.childCount) {
                 choices.getChildAt(index).isEnabled = enabled
             }
@@ -178,6 +215,7 @@ class OverlayController(
         }
 
         fun showCrisis() {
+            hypothesisBlock.visibility = View.GONE
             choices.visibility = View.GONE
             customActions.visibility = View.GONE
             input.visibility = View.GONE
@@ -203,6 +241,7 @@ class OverlayController(
 
         fun renderCard(inputData: InterventionInput, cardResult: AiCard) {
             if (overlayView !== root) return
+            hypothesisBlock.visibility = View.GONE
             choices.visibility = View.GONE
             customActions.visibility = View.GONE
             input.visibility = View.GONE
@@ -268,7 +307,7 @@ class OverlayController(
                 text = "Bunu deneyeceğim"
                 stylePrimaryButton(this)
                 setOnClickListener {
-                    saveRecord(inputData, cardResult, usageMinutes, UserChoice.STOPPED)
+                    saveRecord(inputData, cardResult, usageMinutes, UserChoice.STOPPED, trigger, hypothesis, hypothesisAccepted)
                     dismiss()
                     openLauncher()
                 }
@@ -277,7 +316,7 @@ class OverlayController(
                 text = "Yine de devam et"
                 styleSecondaryButton(this)
                 setOnClickListener {
-                    saveRecord(inputData, cardResult, usageMinutes, UserChoice.CONTINUE)
+                    saveRecord(inputData, cardResult, usageMinutes, UserChoice.CONTINUE, trigger, hypothesis, hypothesisAccepted)
                     dismiss()
                 }
             }, matchWrap())
@@ -341,6 +380,50 @@ class OverlayController(
                     )
                 }
             }, matchWrap(bottom = 8.dp))
+        }
+
+        // When behaviour is unambiguous enough, offer the reading instead of an open question: at a
+        // difficult moment one tap is a far smaller ask than describing yourself in writing. The
+        // answer is recorded either way, because a rejected guess is what keeps the guessing honest.
+        if (hypothesis != null && !hypothesisLabel.isNullOrBlank()) {
+            question.text = "Bu, “$hypothesisLabel” gibi görünüyor. Öyle mi?"
+            choices.visibility = View.GONE
+            customActions.visibility = View.GONE
+            hypothesisBlock.visibility = View.VISIBLE
+            hypothesisBlock.addView(
+                Button(appContext).apply {
+                    text = "Evet, öyle"
+                    setAllCaps(false)
+                    stylePrimaryButton(this)
+                    setOnClickListener {
+                        hypothesisAccepted = true
+                        requestCard(
+                            InterventionInput(
+                                text = hypothesisLabel,
+                                stateId = hypothesis.stateId,
+                                stateLabel = hypothesisLabel,
+                                method = InterventionInputMethod.QUICK_REPLY,
+                            ),
+                        )
+                    }
+                },
+                matchWrap(bottom = 8.dp),
+            )
+            hypothesisBlock.addView(
+                Button(appContext).apply {
+                    text = "Hayır, başka bir şey"
+                    setAllCaps(false)
+                    styleSecondaryButton(this)
+                    setOnClickListener {
+                        hypothesisAccepted = false
+                        hypothesisBlock.visibility = View.GONE
+                        question.text = "Şu an seni burada tutan ne?"
+                        choices.visibility = View.VISIBLE
+                        customActions.visibility = View.VISIBLE
+                    }
+                },
+                matchWrap(),
+            )
         }
 
         customActions.addView(Button(appContext).apply {
@@ -409,6 +492,7 @@ class OverlayController(
         card.addView(brand, matchWrap(bottom = 8.dp))
         card.addView(headline, matchWrap(bottom = 16.dp))
         card.addView(question, matchWrap(bottom = 18.dp))
+        card.addView(hypothesisBlock, matchWrap(bottom = 6.dp))
         card.addView(choices, matchWrap(bottom = 6.dp))
         card.addView(customActions, matchWrap(bottom = 10.dp))
         card.addView(input, matchWrap(bottom = 8.dp))
@@ -457,6 +541,9 @@ class OverlayController(
         card: AiCard,
         usageMinutes: Int,
         choice: UserChoice,
+        trigger: InterventionTrigger,
+        hypothesis: NeedHypothesis?,
+        accepted: Boolean?,
     ) {
         repository.appendRecord(
             InterventionRecord(
@@ -473,6 +560,9 @@ class OverlayController(
                 aiActivityTitle = card.activityTitle,
                 aiDurationMinutes = card.durationMinutes,
                 aiStrategy = card.strategy,
+                trigger = trigger.storageValue,
+                hypothesisStateId = hypothesis?.stateId.orEmpty(),
+                hypothesisAccepted = accepted,
             ),
         )
     }

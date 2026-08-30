@@ -34,6 +34,7 @@ import com.thynatos.esik.ui.DailyReportScreen
 import com.thynatos.esik.ui.HomeScreen
 import com.thynatos.esik.ui.InterventionScreen
 import com.thynatos.esik.ui.OnboardingScreen
+import com.thynatos.esik.usage.InterventionTrigger
 import com.thynatos.esik.usage.UsageStatsReader
 import java.time.LocalDate
 import kotlinx.coroutines.launch
@@ -265,6 +266,9 @@ fun EsikApp(
                         aiActivityTitle = card.activityTitle,
                         aiDurationMinutes = card.durationMinutes,
                         aiStrategy = card.strategy,
+                        // The in-app card is the manual rehearsal of a threshold moment; pattern
+                        // triggers only exist where real behaviour is observed, in the service.
+                        trigger = InterventionTrigger.THRESHOLD.storageValue,
                     )
                     repository.appendRecord(record)
                     records = records + record

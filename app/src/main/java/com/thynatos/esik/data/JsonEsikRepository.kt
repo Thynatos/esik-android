@@ -72,6 +72,13 @@ class JsonEsikRepository internal constructor(private val stateFile: File) : Esi
                         aiActivityTitle = item.optString("ai_aktivite_basligi"),
                         aiDurationMinutes = item.optInt("ai_sure_dk", 0).coerceAtLeast(0),
                         aiStrategy = item.optString("ai_strateji"),
+                        trigger = item.optString("tetikleyici"),
+                        hypothesisStateId = item.optString("tahmin_durum"),
+                        hypothesisAccepted = if (item.has(KEY_HYPOTHESIS_ACCEPTED)) {
+                            item.optBoolean(KEY_HYPOTHESIS_ACCEPTED)
+                        } else {
+                            null
+                        },
                     ),
                 )
             }
@@ -141,6 +148,12 @@ class JsonEsikRepository internal constructor(private val stateFile: File) : Esi
             .put("ai_aktivite_basligi", aiActivityTitle)
             .put("ai_sure_dk", aiDurationMinutes)
             .put("ai_strateji", aiStrategy)
+            .put("tetikleyici", trigger)
+            .put("tahmin_durum", hypothesisStateId)
+            .apply {
+                // Absent rather than false: never having been asked is not a rejection.
+                hypothesisAccepted?.let { put(KEY_HYPOTHESIS_ACCEPTED, it) }
+            }
 
     private fun PersonalizationProfile.toJson(): JSONObject =
         JSONObject()
@@ -213,6 +226,7 @@ class JsonEsikRepository internal constructor(private val stateFile: File) : Esi
         const val FILE_NAME = "esik_state.json"
         const val KEY_PROFILE = "profil"
         const val KEY_RECORDS = "kayitlar"
+        const val KEY_HYPOTHESIS_ACCEPTED = "tahmin_kabul"
         const val DEFAULT_LIMIT_MINUTES = 60
     }
 }

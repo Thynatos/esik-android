@@ -106,6 +106,54 @@ Final decisions:
 
 After a successful overlay display, the monitor uses a 15-minute cooldown.
 
+#### When an intervention is offered
+
+The user's own threshold remains the primary trigger and behaves exactly as before. In addition, the
+monitor may offer a pause during a difficult moment before the threshold is reached, because total
+minutes describe an amount rather than a situation: an hour of deliberate viewing is not the same as
+twelve minutes of opening and closing the same app.
+
+| Trigger | Condition |
+|---|---|
+| `threshold` | Local usage reached the user-defined limit |
+| `immediate_reopen` | The target app was reopened within 30 seconds of being left |
+| `rapid_reopen_loop` | Three or more opens of the target app within ten minutes |
+| `session_drift` | The current session is at least three times the user's own median session |
+
+Pattern triggers are deliberately hard to fire, because an interruption at the wrong moment costs
+more trust than one that never happens:
+
+- nothing fires below ten minutes of use that day;
+- they have their own 45-minute cooldown, separate from the threshold cooldown;
+- at most two pattern interventions per local day;
+- the target app must be in the foreground;
+- the session-drift baseline is ignored until at least five completed sessions exist.
+
+A pattern trigger never changes the threshold, and the user's threshold is never inferred from
+behaviour.
+
+#### Reading the situation before asking
+
+Typing at a difficult moment is the highest-friction thing the product can ask for. When behaviour
+is unambiguous enough, Eşik offers its reading of the situation and asks for one tap instead:
+
+> Bu, "Biraz yoruldum" gibi görünüyor. Öyle mi?
+
+Rules:
+
+- the guess is produced by transparent local rules, not a model, and every rule carries the reason
+  it fired;
+- at least two independent supporting signals are required, otherwise the open question is shown;
+- **Hayır, başka bir şey** returns to the normal quick-state list, and the rejection is recorded;
+- the app measures its own hit rate per state from those answers and stops offering a guess it keeps
+  getting wrong;
+- signals are read on the device, interpreted on the device, and never sent anywhere;
+- no additional Android permission is used: the signals come from the usage-access data the user
+  already granted, plus the clock and charging state.
+
+The guess is a situation offered as a question. It is never a statement about the person, and never
+applied silently.
+
 ### 4. Daily report
 
 The daily report uses only records from the current local date.
@@ -138,12 +186,13 @@ onboarding
   -> optional notification permission request if needed
   -> foreground service polls every 60 seconds
   -> target app is foreground
-  -> local usage >= user threshold
   -> screen is active/unlocked
   -> overlay permission available
-  -> cooldown expired
+  -> local usage >= user threshold, or a behavioural pattern trigger fires
+  -> matching cooldown expired
+  -> local signals interpreted into an optional one-tap guess
   -> real overlay appears
-  -> quick state / text / voice context
+  -> confirmed guess / quick state / text / voice context
   -> local crisis gate
   -> local intervention policy compiler
   -> Gemini structured card OR deterministic fallback
