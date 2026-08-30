@@ -48,10 +48,12 @@ fun HomeScreen(
     monitoringStarted: Boolean,
     hasUsageAccess: Boolean,
     canDrawOverlays: Boolean,
+    hasNotificationPermission: Boolean,
     reportLoading: Boolean,
     onRefresh: () -> Unit,
     onOpenUsagePermission: () -> Unit,
     onOpenOverlayPermission: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
     onUpdateLimit: (Int) -> Unit,
     onStartMonitoring: () -> Unit,
     onStopMonitoring: () -> Unit,
@@ -222,6 +224,14 @@ fun HomeScreen(
                     onAction = onOpenOverlayPermission,
                 )
             }
+            if (!hasNotificationPermission) {
+                PermissionBanner(
+                    title = "Takip bildirimi kapalı",
+                    explanation = "Takip açıkken Eşik'in arka planda çalıştığını bildirim alanında da görebilirsin. Bu izin takip için zorunlu değildir.",
+                    actionLabel = "İzin ver",
+                    onAction = onRequestNotificationPermission,
+                )
+            }
 
             SectionTitle(
                 title = "Takip ayarları",
@@ -258,7 +268,7 @@ fun HomeScreen(
                     }
                     if (!permissionsReady && !monitoringStarted) {
                         Text(
-                            "Takibi başlatmak için iki izni de aç.",
+                            "Takibi başlatmak için kullanım erişimi ve ekran üstü kart iznini aç.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
