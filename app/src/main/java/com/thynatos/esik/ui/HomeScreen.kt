@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ fun HomeScreen(
     monitoringStarted: Boolean,
     hasUsageAccess: Boolean,
     canDrawOverlays: Boolean,
+    reportLoading: Boolean,
     onRefresh: () -> Unit,
     onOpenUsagePermission: () -> Unit,
     onOpenOverlayPermission: () -> Unit,
@@ -62,6 +64,7 @@ fun HomeScreen(
     var limitText by rememberSaveable(profile.dailyLimitMinutes) {
         mutableStateOf(profile.dailyLimitMinutes.toString())
     }
+    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
     val progress = if (profile.dailyLimitMinutes <= 0) 0f else {
         (usageMinutes.toFloat() / profile.dailyLimitMinutes.toFloat()).coerceIn(0f, 1f)
     }
@@ -182,7 +185,18 @@ fun HomeScreen(
                             StatItem(value = recordCount.toString(), label = "cihazdaki kayıt")
                         }
                     }
-                    PrimaryActionButton(text = "Günlük raporu aç", onClick = onOpenReport)
+                    PrimaryActionButton(
+                        text = if (reportLoading) "Rapor hazırlanıyor…" else "Günlük raporu aç",
+                        onClick = onOpenReport,
+                        enabled = !reportLoading,
+                    )
+                    if (reportLoading) {
+                        Text(
+                            "Bugünkü yerel kayıtlar değerlendiriliyor. Bu birkaç saniye sürebilir.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
@@ -288,10 +302,40 @@ fun HomeScreen(
             DeveloperToolsCard {
                 SecondaryActionButton("Kart ekranını test et", onClick = onOpenIntervention)
                 SecondaryActionButton("4 günlük demo verisi yükle", onClick = onLoadDemoData)
-                TextButton(onClick = onClearData, modifier = Modifier.fillMaxWidth()) {
+                TextButton(
+                    onClick = { showDeleteConfirmation = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Tüm verileri sil", color = MaterialTheme.colorScheme.error)
                 }
             }
         }
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Tüm Eşik verileri silinsin mi?") },
+            text = {
+                Text(
+                    "Profilin, yerel müdahale kayıtların ve takip durumu bu cihazdan silinecek. Bu işlem geri alınamaz.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onClearData()
+                    },
+                ) {
+                    Text("Sil", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Vazgeç")
+                }
+            },
+        )
     }
 }
