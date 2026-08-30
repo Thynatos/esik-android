@@ -8,7 +8,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -24,9 +23,8 @@ import com.thynatos.esik.ai.NeedInference
 import com.thynatos.esik.ai.NeedInferenceCalibration
 import com.thynatos.esik.data.JsonEsikRepository
 import com.thynatos.esik.overlay.OverlayController
+import com.thynatos.esik.usage.CooldownPolicy
 import com.thynatos.esik.usage.InterventionTrigger
-import com.thynatos.esik.usage.InterventionTriggerPolicy
-import com.thynatos.esik.usage.NeedSignals
 import com.thynatos.esik.usage.UsageStatsReader
 import java.time.Instant
 import java.time.ZoneId
@@ -75,126 +73,71 @@ class UsageMonitorService : Service() {
 
     private fun pollSafely() {
         runCatching { poll() }
-            .onFailure { error ->
-                Log.e(TAG, "Usage monitor poll failed", error)
-            }
+            .onFailure { error -> Log.e(TAG, "Usage monitor poll failed", error) }
     }
 
     private fun poll() {
-        val profile = repository.loadProfile()
-            ?: return debugState("waiting: no profile")
-        if (profile.targetPackage.isBlank()) {
-            return debugState("waiting: target package missing")
-        }
-        if (!usageStatsReader.hasUsageAccess()) {
-            return debugState("waiting: usage access missing")
-        }
-        if (!Settings.canDrawOverlays(this)) {
-            return debugState("waiting: overlay permission missing")
-        }
-        if (!isScreenAvailableForIntervention()) {
-            return debugState("waiting: screen locked or inactive")
-        }
-        if (overlayController.isShowing) {
-            return debugState("waiting: overlay already showing")
-        }
+        val profile = repository.loadProfile() ?: return debugState("waiting: no profile")
+        if (profile.targetPackage.isBlank()) return debugState("waiting: target package missing")
+        if (!usageStatsReader.hasUsageAccess()) return debugState("waiting: usage access missing")
+        if (!Settings.canDrawOverlays(this)) return debugState("waiting: overlay permission missing")
+        if (!isScreenAvailableForIntervention()) return debugState("waiting: screen locked or inactive")
+        if (overlayController.isShowing) return debugState("waiting: overlay already showing")
 
         val foregroundPackage = usageStatsReader.currentForegroundPackage()
             ?: return debugState("waiting: foreground package unknown")
         if (foregroundPackage != profile.targetPackage) {
+            return debugState("waiting: foreground=$foregroundPackage target=${profile.targetPackage}")
+        }
+
+        val usageMinutes = usageStatsReader.todayUsageMinutes(profile.targetPackage)
+        if (usageMinutes < profile.dailyLimitMinutes) {
+            return debugState("waiting: target active, usage=$usageMinutes/${profile.dailyLimitMinutes}m")
+        }
+
+        val preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
+        val lastShown = preferences.getLong(KEY_LAST_SHOWN_AT, NO_TIMESTAMP)
+            .takeUnless { it == NO_TIMESTAMP }
+        val now = System.currentTimeMillis()
+        val cooldownRemaining = CooldownPolicy.remainingMillis(now, lastShown)
+        if (cooldownRemaining > 0L) {
+            val secondsRemaining = (cooldownRemaining + 999L) / 1_000L
             return debugState(
-                "waiting: foreground=$foregroundPackage target=${profile.targetPackage}",
+                "waiting: cooldown ${secondsRemaining}s remaining; usage=$usageMinutes/${profile.dailyLimitMinutes}m",
             )
         }
 
-        val now = System.currentTimeMillis()
-        val usageMinutes = usageStatsReader.todayUsageMinutes(profile.targetPackage)
-        val preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
+        // The user-defined threshold is still the only trigger. Usage shape is consulted only after
+        // eligibility has already been established, and only to offer a tentative one-tap context.
         val snapshot = usageStatsReader.patternSnapshot(profile.targetPackage, now)
-
-        val decision = InterventionTriggerPolicy.decide(
-            snapshot = snapshot,
-            usageMinutes = usageMinutes,
-            dailyLimitMinutes = profile.dailyLimitMinutes,
-            nowMillis = now,
-            lastThresholdShownAtMillis = preferences
-                .getLong(KEY_LAST_SHOWN_AT, NO_TIMESTAMP)
-                .takeUnless { it == NO_TIMESTAMP },
-            lastPatternShownAtMillis = preferences
-                .getLong(KEY_LAST_PATTERN_AT, NO_TIMESTAMP)
-                .takeUnless { it == NO_TIMESTAMP },
-            patternInterventionsToday = patternInterventionsToday(preferences, now),
-        )
-        val trigger = decision.trigger
-            ?: return debugState(
-                "waiting: ${decision.reason}; usage=$usageMinutes/${profile.dailyLimitMinutes}m",
-            )
-
         val hypothesis = NeedInferenceCalibration.filter(
             hypothesis = NeedInference.infer(
-                NeedSignals.of(
-                    pattern = snapshot,
-                    trigger = trigger,
-                    hourOfDay = Instant.ofEpochMilli(now)
-                        .atZone(ZoneId.systemDefault())
-                        .hour,
-                    isCharging = usageStatsReader.isCharging(),
-                    usageMinutes = usageMinutes,
-                    dailyLimitMinutes = profile.dailyLimitMinutes,
-                ),
+                pattern = snapshot,
+                hourOfDay = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).hour,
             ),
             records = repository.loadRecords(),
         )
 
         debugState(
-            "eligible: trigger=${trigger.storageValue} (${decision.reason}); " +
-                "guess=${hypothesis?.stateId ?: "none"}; " +
+            "eligible: threshold; context=${hypothesis?.stateId ?: "ask"}; " +
                 "usage=$usageMinutes/${profile.dailyLimitMinutes}m",
         )
         ContextCompat.getMainExecutor(this).execute {
-            if (overlayController.show(profile, usageMinutes, trigger, hypothesis)) {
-                recordShown(preferences, trigger, now)
+            if (
+                overlayController.show(
+                    profile = profile,
+                    usageMinutes = usageMinutes,
+                    trigger = InterventionTrigger.THRESHOLD,
+                    hypothesis = hypothesis,
+                )
+            ) {
+                preferences.edit().putLong(KEY_LAST_SHOWN_AT, now).apply()
                 debugState("overlay shown; cooldown started")
             } else {
                 debugState("overlay show failed")
             }
         }
     }
-
-    /**
-     * Pattern interventions are capped per local day, so the counter resets when the date changes
-     * rather than on a rolling window the user cannot predict.
-     */
-    private fun patternInterventionsToday(
-        preferences: SharedPreferences,
-        nowMillis: Long,
-    ): Int {
-        val today = localDateKey(nowMillis)
-        if (preferences.getString(KEY_PATTERN_COUNT_DATE, null) != today) return 0
-        return preferences.getInt(KEY_PATTERN_COUNT, 0)
-    }
-
-    private fun recordShown(
-        preferences: SharedPreferences,
-        trigger: InterventionTrigger,
-        nowMillis: Long,
-    ) {
-        val editor = preferences.edit()
-        if (trigger.isPattern) {
-            val today = localDateKey(nowMillis)
-            val shownToday = patternInterventionsToday(preferences, nowMillis)
-            editor
-                .putLong(KEY_LAST_PATTERN_AT, nowMillis)
-                .putString(KEY_PATTERN_COUNT_DATE, today)
-                .putInt(KEY_PATTERN_COUNT, shownToday + 1)
-        } else {
-            editor.putLong(KEY_LAST_SHOWN_AT, nowMillis)
-        }
-        editor.apply()
-    }
-
-    private fun localDateKey(nowMillis: Long): String =
-        Instant.ofEpochMilli(nowMillis).atZone(ZoneId.systemDefault()).toLocalDate().toString()
 
     private fun isScreenAvailableForIntervention(): Boolean {
         val powerManager = getSystemService(PowerManager::class.java)
@@ -260,17 +203,11 @@ class UsageMonitorService : Service() {
         private const val POLL_INTERVAL_SECONDS = 60L
         private const val PREFERENCES_NAME = "esik_monitor"
         private const val KEY_LAST_SHOWN_AT = "last_overlay_at"
-        private const val KEY_LAST_PATTERN_AT = "last_pattern_overlay_at"
-        private const val KEY_PATTERN_COUNT_DATE = "pattern_overlay_date"
-        private const val KEY_PATTERN_COUNT = "pattern_overlay_count"
         private const val KEY_MONITORING_ENABLED = "monitoring_enabled"
         private const val NO_TIMESTAMP = -1L
 
         fun start(context: Context) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, UsageMonitorService::class.java),
-            )
+            ContextCompat.startForegroundService(context, Intent(context, UsageMonitorService::class.java))
             context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(KEY_MONITORING_ENABLED, true)
@@ -293,9 +230,6 @@ class UsageMonitorService : Service() {
             context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .remove(KEY_LAST_SHOWN_AT)
-                .remove(KEY_LAST_PATTERN_AT)
-                .remove(KEY_PATTERN_COUNT_DATE)
-                .remove(KEY_PATTERN_COUNT)
                 .apply()
         }
     }
