@@ -33,7 +33,7 @@ import com.thynatos.esik.permissions.PermissionNavigator
 import com.thynatos.esik.ui.DailyReportScreen
 import com.thynatos.esik.ui.HomeScreen
 import com.thynatos.esik.ui.InterventionScreen
-import com.thynatos.esik.ui.OnboardingScreen
+import com.thynatos.esik.ui.OnboardingIntroFlow
 import com.thynatos.esik.usage.UsageStatsReader
 import java.time.LocalDate
 import kotlinx.coroutines.launch
@@ -123,7 +123,7 @@ fun EsikApp(
     }
 
     when (screen) {
-        AppScreen.ONBOARDING -> OnboardingScreen(
+        AppScreen.ONBOARDING -> OnboardingIntroFlow(
             installedApps = installedApps,
             hasUsageAccess = hasUsageAccess,
             canDrawOverlays = canDrawOverlays,
