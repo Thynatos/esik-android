@@ -299,15 +299,29 @@ fun HomeScreen(
                 }
             }
 
+            SectionTitle(
+                title = "Verilerin",
+                supportingText = "Profilin ve müdahale kayıtların yalnızca bu cihazda tutulur.",
+            )
+            EsikCard {
+                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.medium)) {
+                    Text(
+                        "Eşik hesabı oluşturmaz. İstersen profilini, yerel kayıtlarını ve takip durumunu tek adımda temizleyebilirsin.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(
+                        onClick = { showDeleteConfirmation = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Tüm verileri sil", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+
             DeveloperToolsCard {
                 SecondaryActionButton("Kart ekranını test et", onClick = onOpenIntervention)
                 SecondaryActionButton("4 günlük demo verisi yükle", onClick = onLoadDemoData)
-                TextButton(
-                    onClick = { showDeleteConfirmation = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Tüm verileri sil", color = MaterialTheme.colorScheme.error)
-                }
             }
         }
     }
