@@ -110,7 +110,7 @@ class GeminiAiGateway(
                 model = reportModel,
                 systemPrompt = AiPrompts.REPORT_SYSTEM_PROMPT,
                 userPrompt = reportInputJson(profile, records, currentUsageMinutes).toString(2),
-                maxTokens = 2_048,
+                maxTokens = 500,
             )
             val content = extractJson(raw)
             val observation = content.optString("observation_question").trim().take(220)
