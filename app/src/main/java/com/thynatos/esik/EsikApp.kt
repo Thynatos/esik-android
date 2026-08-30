@@ -2,6 +2,7 @@ package com.thynatos.esik
 
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -101,6 +102,12 @@ fun EsikApp(
         } else if (screen == AppScreen.REPORT && report == null) {
             screen = AppScreen.HOME
         }
+    }
+
+    BackHandler(
+        enabled = screen == AppScreen.INTERVENTION || screen == AppScreen.REPORT,
+    ) {
+        screen = AppScreen.HOME
     }
 
     when (screen) {
