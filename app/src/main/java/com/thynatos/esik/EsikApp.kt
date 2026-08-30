@@ -29,6 +29,7 @@ import com.thynatos.esik.ui.DailyReportScreen
 import com.thynatos.esik.ui.HomeScreen
 import com.thynatos.esik.ui.InterventionScreen
 import com.thynatos.esik.ui.OnboardingScreen
+import com.thynatos.esik.ui.SplashScreen
 import com.thynatos.esik.usage.UsageStatsReader
 import java.time.LocalDate
 
@@ -49,6 +50,7 @@ fun EsikApp(
     val usageReader = remember(context) { UsageStatsReader(context) }
     val installedApps = remember(context) { InstalledAppLoader.load(context) }
 
+    var showSplash by rememberSaveable { mutableStateOf(true) }
     var profile by remember { mutableStateOf(repository.loadProfile()) }
     var records by remember { mutableStateOf(repository.loadRecords()) }
     var currentUsageMinutes by remember { mutableIntStateOf(0) }
@@ -99,135 +101,139 @@ fun EsikApp(
         }
     }
 
-    when (screen) {
-        AppScreen.ONBOARDING -> OnboardingScreen(
-            installedApps = installedApps,
-            hasUsageAccess = hasUsageAccess,
-            canDrawOverlays = canDrawOverlays,
-            onOpenUsagePermission = {
-                PermissionNavigator.openUsageAccessSettings(context)
-            },
-            onOpenOverlayPermission = {
-                PermissionNavigator.openOverlaySettings(context)
-            },
-            onComplete = { newProfile ->
-                repository.saveProfile(newProfile)
-                UsageMonitorService.resetCooldown(context)
-                profile = newProfile
-                report = null
-                currentUsageMinutes = usageReader.todayUsageMinutes(newProfile.targetPackage)
-                screen = AppScreen.HOME
-            },
-        )
-
-        AppScreen.HOME -> profile?.let { activeProfile ->
-            HomeScreen(
-                profile = activeProfile,
-                usageMinutes = currentUsageMinutes,
-                recordCount = records.size,
-                monitoringStarted = monitoringStarted,
+    if (showSplash) {
+        SplashScreen(onTimeout = { showSplash = false })
+    } else {
+        when (screen) {
+            AppScreen.ONBOARDING -> OnboardingScreen(
+                installedApps = installedApps,
                 hasUsageAccess = hasUsageAccess,
                 canDrawOverlays = canDrawOverlays,
-                onRefresh = {
-                    permissionRefreshNonce++
-                    currentUsageMinutes = usageReader.todayUsageMinutes(activeProfile.targetPackage)
-                    records = repository.loadRecords()
-                },
                 onOpenUsagePermission = {
                     PermissionNavigator.openUsageAccessSettings(context)
                 },
                 onOpenOverlayPermission = {
                     PermissionNavigator.openOverlaySettings(context)
                 },
-                onUpdateLimit = { limit ->
-                    val updated = activeProfile.copy(dailyLimitMinutes = limit)
-                    repository.saveProfile(updated)
+                onComplete = { newProfile ->
+                    repository.saveProfile(newProfile)
                     UsageMonitorService.resetCooldown(context)
-                    profile = updated
+                    profile = newProfile
                     report = null
-                },
-                onStartMonitoring = {
-                    UsageMonitorService.start(context)
-                    monitoringStarted = true
-                },
-                onStopMonitoring = {
-                    UsageMonitorService.stop(context)
-                    monitoringStarted = false
-                },
-                onOpenTargetApp = {
-                    launchPackage(context, activeProfile.targetPackage)
-                },
-                onOpenIntervention = {
-                    interventionUsageMinutes = maxOf(
-                        currentUsageMinutes,
-                        activeProfile.dailyLimitMinutes + 18,
-                    )
-                    screen = AppScreen.INTERVENTION
-                },
-                onOpenReport = {
-                    val allRecords = repository.loadRecords()
-                    val today = LocalDate.now()
-                    val todayRecords = allRecords.filter { it.occursOn(today) }
-                    records = allRecords
-                    report = aiGateway.generateDailyReport(
-                        profile = activeProfile,
-                        records = todayRecords,
-                        currentUsageMinutes = currentUsageMinutes,
-                    )
-                    screen = AppScreen.REPORT
-                },
-                onLoadDemoData = {
-                    val seeded = DemoDataSeeder.records()
-                    repository.replaceRecords(seeded)
-                    records = seeded
-                    report = null
-                    if (currentUsageMinutes == 0) {
-                        currentUsageMinutes = activeProfile.dailyLimitMinutes + 34
-                    }
-                },
-                onClearData = {
-                    UsageMonitorService.stop(context)
-                    UsageMonitorService.resetCooldown(context)
-                    monitoringStarted = false
-                    repository.clearAll()
-                    profile = null
-                    records = emptyList()
-                    report = null
-                    currentUsageMinutes = 0
-                    screen = AppScreen.ONBOARDING
-                },
-            )
-        }
-
-        AppScreen.INTERVENTION -> profile?.let { activeProfile ->
-            InterventionScreen(
-                profile = activeProfile,
-                usageMinutes = interventionUsageMinutes,
-                aiGateway = aiGateway,
-                onChoice = { text, choice ->
-                    val record = InterventionRecord(
-                        timestampEpochMillis = System.currentTimeMillis(),
-                        usageMinutes = interventionUsageMinutes,
-                        text = text,
-                        choice = choice,
-                    )
-                    repository.appendRecord(record)
-                    records = records + record
-                    report = null
+                    currentUsageMinutes = usageReader.todayUsageMinutes(newProfile.targetPackage)
                     screen = AppScreen.HOME
-                    if (choice == UserChoice.CONTINUE) {
-                        launchPackage(context, activeProfile.targetPackage)
-                    }
                 },
-                onBack = { screen = AppScreen.HOME },
             )
-        }
 
-        AppScreen.REPORT -> report?.let { activeReport ->
-            DailyReportScreen(
-                report = activeReport,
-                onBack = { screen = AppScreen.HOME },
-            )
+            AppScreen.HOME -> profile?.let { activeProfile ->
+                HomeScreen(
+                    profile = activeProfile,
+                    usageMinutes = currentUsageMinutes,
+                    recordCount = records.size,
+                    monitoringStarted = monitoringStarted,
+                    hasUsageAccess = hasUsageAccess,
+                    canDrawOverlays = canDrawOverlays,
+                    onRefresh = {
+                        permissionRefreshNonce++
+                        currentUsageMinutes = usageReader.todayUsageMinutes(activeProfile.targetPackage)
+                        records = repository.loadRecords()
+                    },
+                    onOpenUsagePermission = {
+                        PermissionNavigator.openUsageAccessSettings(context)
+                    },
+                    onOpenOverlayPermission = {
+                        PermissionNavigator.openOverlaySettings(context)
+                    },
+                    onUpdateLimit = { limit ->
+                        val updated = activeProfile.copy(dailyLimitMinutes = limit)
+                        repository.saveProfile(updated)
+                        UsageMonitorService.resetCooldown(context)
+                        profile = updated
+                        report = null
+                    },
+                    onStartMonitoring = {
+                        UsageMonitorService.start(context)
+                        monitoringStarted = true
+                    },
+                    onStopMonitoring = {
+                        UsageMonitorService.stop(context)
+                        monitoringStarted = false
+                    },
+                    onOpenTargetApp = {
+                        launchPackage(context, activeProfile.targetPackage)
+                    },
+                    onOpenIntervention = {
+                        interventionUsageMinutes = maxOf(
+                            currentUsageMinutes,
+                            activeProfile.dailyLimitMinutes + 18,
+                        )
+                        screen = AppScreen.INTERVENTION
+                    },
+                    onOpenReport = {
+                        val allRecords = repository.loadRecords()
+                        val today = LocalDate.now()
+                        val todayRecords = allRecords.filter { it.occursOn(today) }
+                        records = allRecords
+                        report = aiGateway.generateDailyReport(
+                            profile = activeProfile,
+                            records = todayRecords,
+                            currentUsageMinutes = currentUsageMinutes,
+                        )
+                        screen = AppScreen.REPORT
+                    },
+                    onLoadDemoData = {
+                        val seeded = DemoDataSeeder.records()
+                        repository.replaceRecords(seeded)
+                        records = seeded
+                        report = null
+                        if (currentUsageMinutes == 0) {
+                            currentUsageMinutes = activeProfile.dailyLimitMinutes + 34
+                        }
+                    },
+                    onClearData = {
+                        UsageMonitorService.stop(context)
+                        UsageMonitorService.resetCooldown(context)
+                        monitoringStarted = false
+                        repository.clearAll()
+                        profile = null
+                        records = emptyList()
+                        report = null
+                        currentUsageMinutes = 0
+                        screen = AppScreen.ONBOARDING
+                    },
+                )
+            }
+
+            AppScreen.INTERVENTION -> profile?.let { activeProfile ->
+                InterventionScreen(
+                    profile = activeProfile,
+                    usageMinutes = interventionUsageMinutes,
+                    aiGateway = aiGateway,
+                    onChoice = { text, choice ->
+                        val record = InterventionRecord(
+                            timestampEpochMillis = System.currentTimeMillis(),
+                            usageMinutes = interventionUsageMinutes,
+                            text = text,
+                            choice = choice,
+                        )
+                        repository.appendRecord(record)
+                        records = records + record
+                        report = null
+                        screen = AppScreen.HOME
+                        if (choice == UserChoice.CONTINUE) {
+                            launchPackage(context, activeProfile.targetPackage)
+                        }
+                    },
+                    onBack = { screen = AppScreen.HOME },
+                )
+            }
+
+            AppScreen.REPORT -> report?.let { activeReport ->
+                DailyReportScreen(
+                    report = activeReport,
+                    onBack = { screen = AppScreen.HOME },
+                )
+            }
         }
     }
 }
