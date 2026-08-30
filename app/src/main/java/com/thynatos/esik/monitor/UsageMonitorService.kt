@@ -156,7 +156,7 @@ class UsageMonitorService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(R.drawable.ic_esik_notification)
             .setContentTitle(getString(R.string.monitor_notification_title))
             .setContentText(getString(R.string.monitor_notification_text))
             .setContentIntent(pendingIntent)
