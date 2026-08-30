@@ -1,8 +1,10 @@
 # Frozen Data Contract — Schema v4
 
-This document defines the persisted device-local contract and the current structured AI contracts. Existing schema-v1/v2/v3 files remain readable: newer fields have defaults and old records are never deleted or rewritten.
+Schema v4 extends the existing v3 personalization/intervention contract with optional local context-hypothesis fields. Existing v1/v2/v3 files remain readable: new fields have defaults and old records are never deleted or rewritten.
 
 ## Persisted device state
+
+Representative shape:
 
 ```json
 {
@@ -16,36 +18,21 @@ This document defines the persisted device-local contract and the current struct
     "hedef_app": "Instagram",
     "hedef_paket": "com.instagram.android",
     "limit_dk": 60,
-    "biyografi": "Derslerden sonra yoruluyorum ve çalışmaya başlamak yerine Instagram'da oyalanıyorum. Gitarı ve koşmayı seviyorum.",
+    "biyografi": "Derslerden sonra yoruluyorum ve çalışmaya başlamak yerine Instagram'da oyalanıyorum.",
     "kisisellestirme": {
-      "hedefler": ["daha düzenli çalışmak", "gece daha rahat uyumak"],
-      "tekrarlayan_baglamlar": ["yorgunluk", "erteleme"],
-      "tercih_edilen_aktiviteler": ["gitar", "koşu"],
-      "dusuk_enerji_aktiviteleri": [
-        "bir şarkı boyunca telefonu bırakmak",
-        "bir bardak su içip ekrandan uzaklaşmak"
-      ],
-      "ton": "supportive_direct",
-      "profil_ozeti": "Özellikle bir işe başlamadan önce ve enerjin düştüğünde Instagram'a kaydığını anlattın.",
+      "profil_ozeti": "Özellikle bir işe başlamadan önce Instagram'a kaydığını anlattın.",
       "odak_hedefleri": ["ders çalışmak"],
+      "hedefler": ["daha düzenli çalışmak"],
+      "tekrarlayan_baglamlar": ["erteleme"],
+      "tercih_edilen_aktiviteler": ["gitar", "koşu"],
+      "dusuk_enerji_aktiviteleri": ["bir şarkı boyunca telefonu bırakmak"],
+      "ton": "supportive_direct",
       "hizli_durumlar": [
-        {
-          "id": "tired",
-          "etiket": "Biraz yoruldum",
-          "emoji": "😴",
-          "kategori": "low_energy"
-        },
         {
           "id": "procrastinating",
           "etiket": "Bir şeyi erteliyorum",
           "emoji": "🫠",
           "kategori": "avoidance"
-        },
-        {
-          "id": "relaxing",
-          "etiket": "Sadece kafa dağıtıyorum",
-          "emoji": "😌",
-          "kategori": "intentional_rest"
         }
       ]
     }
@@ -55,41 +42,75 @@ This document defines the persisted device-local contract and the current struct
       "zaman_ms": 1788034200000,
       "saat": "23:10",
       "kullanim_dk": 78,
-      "metin": "Bir şeyi erteliyorum",
-      "durum_id": "procrastinating",
-      "durum_etiket": "Bir şeyi erteliyorum",
+      "metin": "Alışkanlıkla açtım",
+      "durum_id": "habit",
+      "durum_etiket": "Alışkanlıkla açtım",
       "girdi_yontemi": "quick_reply",
-      "ai_soru": "Ertelediğin şeyin yalnızca ilk iki dakikasını yapmak daha ulaşılabilir olabilir mi?",
-      "ai_alternatif": "Ödevin için yalnızca ilk iki dakikalık adımı başlatabilirsin.",
-      "ai_yansima": "Başlamak şu anda işin kendisinden daha zor geliyor olabilir.",
-      "ai_aktivite_basligi": "İlk 3 dakika",
-      "ai_sure_dk": 3,
-      "ai_strateji": "micro_start",
-      "tetikleyici": "rapid_reopen_loop",
+      "ai_soru": "Burada kalmayı şu anda bilinçli olarak seçiyor musun?",
+      "ai_alternatif": "Telefonu iki dakika bırakıp sonra yeniden karar verebilirsin.",
+      "ai_yansima": "Bu açılış biraz otomatik gelmiş olabilir.",
+      "ai_aktivite_basligi": "2 dakikalık ara",
+      "ai_sure_dk": 2,
+      "ai_strateji": "environment_change",
+      "tetikleyici": "threshold",
       "tahmin_durum": "habit",
-      "tahmin_kabul": false,
+      "tahmin_kabul": true,
       "secim": "vazgectim"
     }
   ]
 }
 ```
 
-The persisted intervention record stores visible AI fields plus the selected strategy metadata, not the compiled local policy.
+## Schema-v4 context fields
 
-## Behavioural signals
+### `tetikleyici`
 
-`tetikleyici` records why the moment was interrupted. `tahmin_durum` and `tahmin_kabul` record the
-guess the app offered about the current state and whether the user accepted it.
+The current product writes:
 
-`tahmin_kabul` is **absent** when no guess was offered. It is never written as `false` for a moment
-the user was simply not asked about: silence is not a rejection, and the calibration that decides
-whether to keep guessing counts only explicit answers.
+```text
+threshold
+```
 
-The signals behind a guess — session lengths, open counts, the personal median session, the gap
-since the last visit, the app used immediately before, the current unbroken run of device use, the
-hour, and charging state — are derived on the device from the usage-access data the user already
-granted, interpreted on the device, and never persisted or transmitted. Only the resulting state ID
-is stored.
+The user-defined daily threshold is the only runtime intervention trigger. Experimental historical values such as `immediate_reopen`, `rapid_reopen_loop`, and `session_drift` remain parseable for backward compatibility, but the current monitor does not generate them.
+
+### `tahmin_durum`
+
+Optional canonical quick-state ID for the tentative context shown before the user selected a state. The current inference layer can produce only:
+
+```text
+habit
+late_night
+```
+
+It does not infer procrastination, boredom, fatigue, overwhelm, low motivation, or other motives from usage events alone.
+
+### `tahmin_kabul`
+
+- `true`: the user explicitly confirmed the tentative context;
+- `false`: the user explicitly rejected it and continued with normal context selection;
+- absent: no hypothesis was offered or no explicit answer was recorded.
+
+Absence is never interpreted as rejection.
+
+Calibration uses only explicit answers. After at least three answers for the same hypothesis state, a recent acceptance ratio at or below `0.34` suppresses that hypothesis. At most the latest 30 explicit answers per state are considered.
+
+## Usage-shape data
+
+Recent `UsageEvents` may be read locally only **after** the normal threshold and cooldown conditions are already satisfied. They provide context; they do not trigger an intervention.
+
+Derived transient values include:
+
+- target-app open count in a short window;
+- current/completed session durations;
+- median completed-session duration;
+- gap since the previous target session;
+- previous foreground package;
+- current continuous device-use run;
+- local hour.
+
+These raw/derived signals are not persisted and are not sent to Gemini. Only the optional canonical hypothesis ID and the user's explicit confirmation/rejection are stored.
+
+To reduce false reopen signals from Android Activity transitions, adjacent same-package sessions separated by at most five seconds are coalesced unless a screen-off event occurred between them.
 
 ## Stable persisted enums
 
@@ -104,21 +125,6 @@ is stored.
 - `yine_de_gir`
 - `vazgectim`
 
-### `tetikleyici`
-
-- `threshold` — the user reached the limit they set
-- `immediate_reopen` — reopened within 30 seconds of leaving
-- `rapid_reopen_loop` — three or more opens within ten minutes
-- `session_drift` — session at least three times the user's own median
-
-An empty or unrecognised value means no trigger was recorded, and is never guessed at.
-
-### `tahmin_durum`
-
-A canonical quick-state ID, or empty when no guess was offered. Inference currently produces only
-`late_night`, `habit`, `tired` and `bored`; every other canonical state is reached by the user
-choosing it.
-
 ### `ton`
 
 - `supportive_direct`
@@ -126,6 +132,21 @@ choosing it.
 - `practical`
 
 Quick-state IDs are stable lowercase ASCII identifiers. Labels and emoji are display values and may change without breaking historical grouping.
+
+## Canonical quick-state IDs
+
+```text
+tired
+procrastinating
+relaxing
+bored
+habit
+waiting
+low_motivation
+overwhelmed
+late_night
+other
+```
 
 ## Profile AI input
 
@@ -146,19 +167,19 @@ Representative payload:
 
 ```json
 {
-  "profile_summary": "Özellikle bir işe başlamadan önce ve enerjin düştüğünde Instagram'a kaydığını anlattın.",
+  "profile_summary": "Özellikle bir işe başlamadan önce Instagram'a kaydığını anlattın.",
   "focus_targets": ["ders çalışmak"],
-  "goals": ["daha düzenli çalışmak", "gece daha rahat uyumak"],
-  "recurring_contexts": ["yorgunluk", "erteleme"],
+  "goals": ["daha düzenli çalışmak"],
+  "recurring_contexts": ["erteleme"],
   "preferred_activities": ["gitar", "koşu"],
   "low_energy_activities": ["bir şarkı boyunca telefonu bırakmak"],
   "tone": "supportive_direct",
   "quick_states": [
     {
-      "id": "tired",
-      "label": "Biraz yoruldum",
-      "emoji": "😴",
-      "category": "low_energy"
+      "id": "procrastinating",
+      "label": "Bir şeyi erteliyorum",
+      "emoji": "🫠",
+      "category": "avoidance"
     }
   ]
 }
@@ -166,24 +187,9 @@ Representative payload:
 
 Generated profile content is passed through application-side grounding/sanitization. Missing safe defaults may be completed deterministically; at most six quick states are stored. Quick-state IDs come only from the canonical taxonomy; labels and emoji may be personalized.
 
-### Canonical quick-state IDs
-
-```text
-tired
-procrastinating
-relaxing
-bored
-habit
-waiting
-low_motivation
-overwhelmed
-late_night
-other
-```
-
 ## Intervention local policy contract
 
-Before Gemini is called, the app resolves the current context locally. The dynamic payload includes an authoritative `compiled_policy` with fields equivalent to:
+Before Gemini is called, the app resolves the confirmed/user-selected context locally. The dynamic payload contains an authoritative `compiled_policy`, conceptually:
 
 ```json
 {
@@ -203,55 +209,47 @@ Before Gemini is called, the app resolves the current context locally. The dynam
 }
 ```
 
-Exact enum availability is defined in the AI implementation; this JSON illustrates the contract shape rather than a persisted object.
+The optional context hypothesis never changes the user threshold, need taxonomy, duration ceiling, or allowed strategy policy by itself; it only supplies a canonical state after explicit confirmation.
 
 ## Intervention AI structured output
-
-The current internal model response is:
 
 ```json
 {
   "need": "activation",
   "strategy": "micro_start",
   "reflection": "Başlama anı şu anda işin kendisinden daha zor geliyor olabilir.",
-  "question": "Ertelediğin şeyin yalnızca ilk iki dakikasını yapmak daha ulaşılabilir olabilir mi?",
+  "question": "İlk küçük adımı yapmak daha ulaşılabilir olabilir mi?",
   "activity_title": "İlk 3 dakika",
-  "alternative": "İlk adımı iki dakika boyunca açıp yapmayı deneyebilirsin.",
-  "duration_minutes": 2,
+  "alternative": "Yalnızca ilk adımı üç dakika boyunca açıp yapmayı deneyebilirsin.",
+  "duration_minutes": 3,
   "personalization_anchor": "daha düzenli çalışmak"
 }
 ```
 
-Application-side semantic validation checks the returned need/strategy/duration/anchor against the local policy, plus field length, actionability, style, safety, and near-duplicate history. One bounded repair attempt is allowed. The visible `AiCard` contains the reflection, question, activity title, alternative, and duration; internal strategy metadata is retained for intervention history.
+Application-side semantic validation checks need/strategy/duration/anchor, field length, actionability, style, safety, and near-duplicate recent history. One bounded repair attempt is allowed; otherwise the deterministic local gateway is used.
 
-### Recent intervention context
+Only the latest six intervention records are summarized for card generation. The model receives bounded state/choice/previous-alternative context, not the full raw history or old custom text.
 
-Only the latest six intervention records are summarized for card generation. The model receives state, a normalized choice, and a bounded previous alternative, not the full raw history or old custom text. Past choices are weak interaction signals only and never establish that an intervention worked or failed.
+## Daily report
 
-The overlay opens with three stored quick states before any network request. Crisis-signalling external text is blocked locally and never enters the normal Gemini/repair path.
+Numeric usage, threshold, counts, dates, and candidate evidence are computed locally. If fewer than seven current-date records exist, the report model is not called.
 
-## Daily report local evidence
-
-The application computes all counts and candidate patterns locally from current-date records. The model does not discover or recalculate numeric facts.
-
-If fewer than seven current-date records exist, the model is not called.
-
-## Daily report AI structured output
+Representative output:
 
 ```json
 {
   "evidence_state_id": "procrastinating",
-  "observation_question": "“Bir şeyi erteliyorum” dediğin anlarla devam kararların arasında bir örüntü olabilir mi?",
+  "observation_question": "Erteleme dediğin anlarla devam kararların arasında bir örüntü olabilir mi?",
   "micro_step": "Yarın ilk erteleme anında yalnızca iki dakikalık bir başlangıç yapmayı dene."
 }
 ```
 
-`evidence_state_id` must be a locally supplied supported candidate or empty when evidence is mixed/weak. The application validates the reflection before display. The persisted repository currently stores intervention records, not generated daily reports.
-
 ## Compatibility rules
 
-- Do not rename/remove persisted v2 fields during the hackathon.
-- New stored fields require backward-compatible defaults and a schema/documentation update.
-- Internal Gemini structured fields may evolve without changing persisted schema only when the visible/persisted contract remains compatible.
-- Numeric usage, threshold, counts, dates, and evidence aggregates remain application-computed.
+- Existing schema-v1/v2/v3 files remain readable.
+- New stored fields require backward-compatible defaults.
+- Missing `tahmin_kabul` means no explicit answer, never `false`.
+- Numeric facts remain application-computed.
+- Raw usage-shape signals remain device-local and transient.
+- The user-defined threshold remains the only runtime trigger.
 - The model never sets a threshold, diagnoses the user, or states unsupported causation as fact.
