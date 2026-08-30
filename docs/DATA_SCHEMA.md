@@ -1,13 +1,13 @@
-# Frozen Data Contract — Schema v2
+# Frozen Data Contract — Schema v3
 
-This document defines the persisted device-local contract and the current structured AI contracts. Existing schema-v1 files remain readable: v2 fields have defaults and old records are not deleted.
+This document defines the persisted device-local contract and the current structured AI contracts. Existing schema-v1 and schema-v2 files remain readable: newer fields have defaults and old records are never deleted or rewritten.
 
 ## Persisted device state
 
 ```json
 {
   "profil": {
-    "sema_surum": 2,
+    "sema_surum": 3,
     "isim": "Ayşe",
     "bolum": "İstatistik",
     "hobiler": ["gitar", "koşu"],
@@ -59,13 +59,18 @@ This document defines the persisted device-local contract and the current struct
       "girdi_yontemi": "quick_reply",
       "ai_soru": "Ertelediğin şeyin yalnızca ilk iki dakikasını yapmak daha ulaşılabilir olabilir mi?",
       "ai_alternatif": "Ödevin için yalnızca ilk iki dakikalık adımı başlatabilirsin.",
-      "secim": "vazgectim"
+      "secim": "vazgectim",
+      "strateji": "micro_start",
+      "sonuc": "yardimci_oldu",
+      "sonuc_zaman_ms": 1788034920000
     }
   ]
 }
 ```
 
-The persisted intervention record stores only the visible AI question and alternative, not internal model policy fields.
+The persisted intervention record stores the visible AI question and alternative, plus the strategy identifier the shown copy actually describes. It never stores prompts, model reasoning, or internal policy objects.
+
+`strateji` is written by the application, not by the model: it is the strategy the displayed alternative implements. `sonuc` and `sonuc_zaman_ms` are absent until the user answers the follow-up question, and are written exactly once.
 
 ## Stable persisted enums
 
@@ -79,6 +84,27 @@ The persisted intervention record stores only the visible AI question and altern
 
 - `yine_de_gir`
 - `vazgectim`
+
+### `sonuc`
+
+- `bilinmiyor` — the user has not answered yet, or was never asked
+- `yardimci_oldu`
+- `yardimci_olmadi`
+- `denenmedi`
+
+Only `yardimci_oldu` and `yardimci_olmadi` count as evidence about a strategy. `denenmedi` closes the question without saying anything about the suggestion, and `bilinmiyor` is never inferred into one of the others.
+
+### `strateji`
+
+- `low_energy_reset`
+- `micro_start`
+- `timed_intentional_use`
+- `environment_change`
+- `sensory_break`
+- `brief_activity`
+- `other`
+
+Strategy identifiers are stable and shared with the intervention AI contract below.
 
 ### `ton`
 
@@ -137,6 +163,7 @@ Before Gemini is called, the app resolves the current context locally. The dynam
   "objective": "micro_start",
   "allowed_strategies": ["micro_start"],
   "max_duration_minutes": 5,
+  "user_reported_helpful_strategy": "",
   "anchors": {
     "goals": ["daha düzenli çalışmak"],
     "activities": ["gitar", "koşu"],
@@ -148,6 +175,22 @@ Before Gemini is called, the app resolves the current context locally. The dynam
 ```
 
 Exact enum availability is defined in the AI implementation; this JSON illustrates the contract shape rather than a persisted object.
+
+## Local strategy preference
+
+`allowed_strategies` and `user_reported_helpful_strategy` are derived locally from the user's own answered records, before any request is made.
+
+Rules, all enforced in `StrategyEffectivenessBuilder`:
+
+- Only records in the same `durum_id` with a `strateji` and a `sonuc` of `yardimci_oldu`/`yardimci_olmadi` count as attempts.
+- A strategy influences nothing until it has at least three answered attempts in that state.
+- At a helpful ratio of 0.6 or higher it becomes `user_reported_helpful_strategy`, which is a prompt hint only. The semantic validator still accepts every allowed strategy.
+- At a helpful ratio of 0.25 or lower it is removed from `allowed_strategies`.
+- The allowed set is never emptied: if every acceptable strategy would be removed, none is.
+- Only the most recent 60 answered attempts per state are considered, so old behaviour does not bind the user permanently.
+- `other` is never promoted to a preference.
+
+This signal reorders options the policy already considered acceptable. It never changes the need, the objective, the duration ceiling, the anchors, or the user-defined threshold, and it is never shown to the user as a score.
 
 ## Intervention AI structured output
 
@@ -188,7 +231,7 @@ If fewer than seven current-date records exist, the model is not called.
 
 ## Compatibility rules
 
-- Do not rename/remove persisted v2 fields during the hackathon.
+- Do not rename/remove persisted v2 or v3 fields during the hackathon.
 - New stored fields require backward-compatible defaults and a schema/documentation update.
 - Internal Gemini structured fields may evolve without changing persisted schema only when the visible/persisted contract remains compatible.
 - Numeric usage, threshold, counts, dates, and evidence aggregates remain application-computed.
