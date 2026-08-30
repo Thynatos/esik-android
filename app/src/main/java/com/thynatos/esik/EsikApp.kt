@@ -61,6 +61,7 @@ fun EsikApp(
     }
     var permissionRefreshNonce by remember { mutableIntStateOf(0) }
     var report by remember { mutableStateOf<DailyReport?>(null) }
+    var reportLoading by remember { mutableStateOf(false) }
     var screen by rememberSaveable {
         mutableStateOf(if (profile == null) AppScreen.ONBOARDING else AppScreen.HOME)
     }
@@ -119,6 +120,7 @@ fun EsikApp(
                 UsageMonitorService.resetCooldown(context)
                 profile = newProfile
                 report = null
+                reportLoading = false
                 currentUsageMinutes = usageReader.todayUsageMinutes(newProfile.targetPackage)
                 screen = AppScreen.HOME
             },
@@ -132,6 +134,7 @@ fun EsikApp(
                 monitoringStarted = monitoringStarted,
                 hasUsageAccess = hasUsageAccess,
                 canDrawOverlays = canDrawOverlays,
+                reportLoading = reportLoading,
                 onRefresh = {
                     permissionRefreshNonce++
                     currentUsageMinutes = usageReader.todayUsageMinutes(activeProfile.targetPackage)
@@ -169,17 +172,24 @@ fun EsikApp(
                     screen = AppScreen.INTERVENTION
                 },
                 onOpenReport = {
-                    val allRecords = repository.loadRecords()
-                    val today = LocalDate.now()
-                    val todayRecords = allRecords.filter { it.occursOn(today) }
-                    records = allRecords
-                    scope.launch {
-                        report = aiGateway.generateDailyReport(
-                            profile = activeProfile,
-                            records = todayRecords,
-                            currentUsageMinutes = currentUsageMinutes,
-                        )
-                        screen = AppScreen.REPORT
+                    if (!reportLoading) {
+                        val allRecords = repository.loadRecords()
+                        val today = LocalDate.now()
+                        val todayRecords = allRecords.filter { it.occursOn(today) }
+                        records = allRecords
+                        reportLoading = true
+                        scope.launch {
+                            try {
+                                report = aiGateway.generateDailyReport(
+                                    profile = activeProfile,
+                                    records = todayRecords,
+                                    currentUsageMinutes = currentUsageMinutes,
+                                )
+                                screen = AppScreen.REPORT
+                            } finally {
+                                reportLoading = false
+                            }
+                        }
                     }
                 },
                 onLoadDemoData = {
@@ -195,6 +205,7 @@ fun EsikApp(
                     UsageMonitorService.stop(context)
                     UsageMonitorService.resetCooldown(context)
                     monitoringStarted = false
+                    reportLoading = false
                     repository.clearAll()
                     profile = null
                     records = emptyList()
