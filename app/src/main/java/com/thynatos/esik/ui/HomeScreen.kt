@@ -12,11 +12,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.thynatos.esik.data.UserProfile
 import com.thynatos.esik.ui.components.DeveloperSection
+import com.thynatos.esik.ui.components.EsikAppHeader
 import com.thynatos.esik.ui.components.LimitQuickPicker
 import com.thynatos.esik.ui.components.MonitoringControlCard
 import com.thynatos.esik.ui.components.QuickStatsRow
@@ -49,21 +48,15 @@ fun HomeScreen(
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        // Welcome Header
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "Merhaba, ${profile.name} 👋",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 26.sp,
-                ),
-            )
-            Text(
-                text = "Bilinçli kullanım dengesi oluşturuyoruz.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        // App Logo & Welcome Header
+        EsikAppHeader(userName = profile.name)
+
+        Text(
+            text = "Bilinçli kullanım dengesi oluşturuyoruz.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = (-8).dp),
+        )
 
         // 1. Hero Card (Usage & Progress)
         UsageHeroCard(
