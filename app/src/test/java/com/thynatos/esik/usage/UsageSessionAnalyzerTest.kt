@@ -46,6 +46,36 @@ class UsageSessionAnalyzerTest {
     }
 
     @Test
+    fun samePackageActivityTransitionIsNotCountedAsAReopen() {
+        val snapshot = analyze(
+            foreground(TARGET, 0),
+            background(TARGET, seconds(30)),
+            foreground(TARGET, seconds(31)),
+            nowMillis = minutes(2),
+        )
+
+        assertTrue(snapshot.isTargetForeground)
+        assertEquals(1, snapshot.targetOpenCount)
+        assertEquals(0, snapshot.completedSessionCount)
+        assertEquals(UsagePatternSnapshot.UNKNOWN_GAP, snapshot.lastGapMillis)
+    }
+
+    @Test
+    fun leavingForAnotherPackageAndReturningStillCountsAsAReopen() {
+        val snapshot = analyze(
+            foreground(TARGET, 0),
+            foreground(OTHER, seconds(30)),
+            foreground(TARGET, seconds(40)),
+            nowMillis = minutes(2),
+        )
+
+        assertTrue(snapshot.isTargetForeground)
+        assertEquals(2, snapshot.targetOpenCount)
+        assertEquals(seconds(10), snapshot.lastGapMillis)
+        assertEquals(OTHER, snapshot.previousPackage)
+    }
+
+    @Test
     fun onlyOpensInsideTheShortWindowAreCounted() {
         val now = minutes(60)
         val snapshot = analyze(
@@ -134,7 +164,7 @@ class UsageSessionAnalyzerTest {
             nowMillis = minutes(50),
         )
 
-        assertEquals(minutes(50) - minutes(40), snapshot.continuousActivityMillis)
+        assertEquals(minutes(10), snapshot.continuousActivityMillis)
     }
 
     @Test
@@ -147,7 +177,7 @@ class UsageSessionAnalyzerTest {
             nowMillis = minutes(20),
         )
 
-        assertEquals(minutes(20) - minutes(11), snapshot.continuousActivityMillis)
+        assertEquals(minutes(9), snapshot.continuousActivityMillis)
     }
 
     @Test
