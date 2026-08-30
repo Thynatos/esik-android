@@ -59,7 +59,10 @@ class MockAiGateway : AiGateway {
             .take(5)
 
         val lowEnergyActivities = buildList {
-            preferredActivities.firstOrNull()?.let { hobby ->
+            preferredActivities.firstOrNull(::isExerciseActivity)?.let {
+                add("iki dakika hafifçe esnemek")
+            }
+            preferredActivities.firstOrNull { !isExerciseActivity(it) }?.let { hobby ->
                 add(lowEnergyVersion(hobby))
             }
             add("bir bardak su içip ekrandan uzaklaşmak")
@@ -228,19 +231,21 @@ class MockAiGateway : AiGateway {
         hobby.containsAny("müzik", "şarkı", "music", "song") -> "bir şarkı dinlemek"
         hobby.containsAny("kitap", "oku", "book", "read") -> "iki sayfa okumak"
         hobby.containsAny("gitar", "guitar") -> "iki dakika gitar çalmak"
-        hobby.containsAny(
-            "koşu",
-            "koşmak",
-            "spor",
-            "egzersiz",
-            "run",
-            "running",
-            "exercise",
-            "workout",
-            "gym",
-        ) -> "iki dakika hafifçe esnemek"
+        isExerciseActivity(hobby) -> "iki dakika hafifçe esnemek"
         else -> "$hobby için iki dakika ayırmak"
     }
+
+    private fun isExerciseActivity(value: String): Boolean = value.containsAny(
+        "koşu",
+        "koşmak",
+        "spor",
+        "egzersiz",
+        "run",
+        "running",
+        "exercise",
+        "workout",
+        "gym",
+    )
 
     private fun stateForContext(context: String): QuickStateOption? = when (context) {
         "yorgunluk" -> QuickStateOption("tired", "Biraz yoruldum", "😴", "low_energy")
