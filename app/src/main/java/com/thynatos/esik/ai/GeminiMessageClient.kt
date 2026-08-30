@@ -182,5 +182,7 @@ class GeminiApiException(
     val statusCode: Int? = null,
 ) : IllegalStateException(message) {
     val mayBeSchemaCompatibilityFailure: Boolean
-        get() = kind == GeminiFailureKind.HTTP && statusCode in setOf(400, 404, 415, 422)
+        get() = kind == GeminiFailureKind.HTTP &&
+            statusCode != null &&
+            statusCode in setOf(400, 404, 415, 422)
 }
