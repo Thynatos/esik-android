@@ -1,77 +1,182 @@
 # Validation Record
 
-This file separates checks performed on the generated starter from validation completed on a normal Android development machine and physical device.
+This file records what has actually been validated for the current Eşik hackathon candidate. For the current baseline checklist and release workflow, also see `docs/FINALIZATION.md`.
 
-## Passed in the generation environment
+## Automated validation
 
-- Bash syntax for the wrapper, repository-creation, and pure-Kotlin verification scripts
-- XML parsing for the manifest and all resources
-- TOML parsing for the version catalog
-- JSON parsing for every JSON contract/example in the Markdown documentation
-- Secret-pattern scan: no Anthropic key or private-key material is present
-- Pure Kotlin compilation and execution; repository tests compiled and passed through a lightweight local runner, covering:
-  - crisis-language detection
-  - ordinary-text non-match
-  - blocked generated-language checks
-  - word-fragment safety (`küçük` must not be mistaken for `çok`)
-  - cooldown first-show, pre-boundary, boundary, and clock-rollback behavior
-  - four-day demo seeding with eight records on the current date
-  - report unavailable below seven records and available at seven
-  - display-safe deterministic card/report fallback output
-
-Run the same lightweight logic check on macOS/Linux with:
+GitHub Actions runs on feature pushes and executes:
 
 ```bash
-./scripts/verify-pure-kotlin.sh
+./gradlew test --stacktrace
+./gradlew assembleDebug --stacktrace
 ```
 
-## Physical-device validation — 2026-08-29
+The combined candidate passed both tasks before the finalization documentation/icon pass. The workflow is required to stay green after every subsequent feature or fix.
 
-Completed on a real Android phone from the `work/android-core` development setup:
+Current unit coverage includes the most important deterministic logic around:
 
-- `./gradlew test` / `gradlew.bat test`: passed
-- `./gradlew assembleDebug` / `gradlew.bat assembleDebug`: passed
-- Debug APK installed successfully through ADB/Gradle
-- Usage Access permission flow works
-- Draw-over-other-apps permission flow works
-- Selected-app usage minutes are read and displayed with believable values
-- Foreground monitoring service starts successfully
-- User-selected target app is detected while in the foreground
-- A limit below current usage triggers the intervention overlay over the target app
-- The overlay can accept text and show the intervention result
-- The 15-minute cooldown suppresses immediate repeat interventions as designed
-- Changing the configured limit resets the cooldown, allowing immediate retesting
+- crisis-language detection;
+- ordinary-text non-match;
+- unsafe/generated-language checks;
+- cooldown boundaries and remaining-time behavior;
+- demo-data seeding;
+- report eligibility below/at seven records;
+- local context/strategy compilation;
+- card semantic validation;
+- profile grounding;
+- report evidence aggregation and semantic validation;
+- deterministic fallback behavior.
 
-This means the Saturday noon checkpoint is passed: the overlay has been observed above the selected target app on a physical phone after the user-defined limit was exceeded.
+## Android core physical validation
 
-## Android Core hardening added after physical validation
+Validated on a real Android phone:
 
-- Monitoring enabled/disabled state is persisted so reopening Eşik does not automatically present monitoring as stopped
-- Debug-only Logcat diagnostics identify the current monitor state without repeating identical messages continuously
-- Poll failures are logged instead of silently swallowed
-- Cooldown policy exposes remaining cooldown time for diagnostics while preserving the 15-minute product behavior
-- Unit coverage includes cooldown remaining-time and non-positive-cooldown edge cases
+- Usage Access permission flow;
+- Draw over other apps permission flow;
+- selected-app usage minutes;
+- foreground monitoring service;
+- target-app foreground detection;
+- user-defined threshold trigger;
+- real intervention overlay above the selected target app;
+- 15-minute cooldown behavior;
+- cooldown reset after changing the configured limit;
+- lock/unlock handling from the core validation pass;
+- monitoring persistence/restart behavior;
+- both final intervention decisions.
 
-## Still to validate on the demo phone
+The highest-risk Android requirement is therefore validated: Eşik can detect the selected app, observe that the user-defined threshold has been reached, and place the intervention over the real target app.
 
-- Monitoring remains effective after leaving Eşik unused for several minutes
-- Lock/unlock behavior does not surface an overlay over the lock screen
-- Both intervention choices (`Yine de gir` and `Vazgeçtim`) are rechecked after the hardening changes
-- Process/service restart behavior under battery optimization or OEM task killing
-- Android notification-permission behavior on devices where foreground-service notifications are restricted
-- A final physical-device pass after pulling the latest `work/android-core` commits
+## Combined AI + UI emulator gate — 2026-08-30
+
+Environment: Android 16 Google emulator (`sdk_gphone64_x86_64`).
+
+| Scenario | Result |
+|---|---|
+| Fresh onboarding and grounded profile | PASS |
+| Tired-state real overlay/card | PASS |
+| Procrastination custom-text card | PASS |
+| Both final decisions | PASS |
+| Voice failure fallback in emulator | PASS; no real microphone path available |
+| Airplane/offline deterministic fallback | PASS |
+| Seeded daily report | PASS after report gateway fix |
+
+Observed AI diagnostics during the combined gate included:
+
+- profile live response around 2.2 s;
+- tired card live response around 1.1 s;
+- procrastination card live response around 1.0 s;
+- offline card returned immediately through `local_fallback`;
+- final live report around 5.8 s.
+
+## Report gateway fix validated during gate
+
+The daily report initially fell back locally. Direct API reproduction identified two independent causes:
+
+1. a 520-token output limit could be exhausted by model reasoning before JSON output was emitted;
+2. `additionalProperties` was rejected by the tested report model's structured-output schema subset.
+
+The final gateway fix:
+
+- raises the report budget to 2,048 tokens;
+- removes unsupported `additionalProperties` fields from response schemas.
+
+After reinstall/retest, the report completed live with `source=live outcome=ok` and produced an evidence-grounded question plus a two-minute micro-step.
+
+## Final physical-phone smoke pass — 2026-08-30
+
+After the combined integration and report fix, the final candidate was installed on the physical phone and the affected end-to-end paths were rechecked.
+
+Confirmed:
+
+- redesigned Home/product UI opens correctly;
+- monitoring starts after reinstall/reopen;
+- threshold overlay appears above the target app;
+- quick-state intervention returns a card;
+- physical speech recognition returns to the intervention;
+- both final decisions dismiss correctly;
+- seeded daily report opens and completes successfully.
+
+## Post-merge polling/finalization smoke — 2026-08-30
+
+Device: Xiaomi 2311DRK48G, Android 15.
+
+- The current `feature/final-integration` APK installed successfully.
+- The launcher icon and persistent `Eşik aktif` monitoring notification were visible.
+- Android Back returned from the report to Home.
+- The delete-data confirmation appeared and was cancelled without deleting data.
+- Above the user-defined threshold, the Instagram overlay was logged 6.0 seconds after launch.
+- Reopening Instagram during cooldown produced no second overlay; 866 seconds remained.
+- At four current-day records, the report returned the local insufficient-data state and made no Gemini call.
+
+The live seven-record report was validated in the combined AI + UI gate. The post-polish loading label was not re-exercised in the last phone pass because the device had only four current-day records; the product owner ended further in-app testing and accepted the build. No behavior code changed after this smoke pass.
+
+## Final ethics regression
+
+| Requirement | Evidence | Result |
+|---|---|---|
+| Intentional rest is not shamed | `InterventionContextBuilderTest.intentionalRestPreservesAutonomyWithTimedUseStrategy` plus the validated intentional-continue flow | PASS |
+| Sparse profiles do not invent hobbies | `ProfileGroundingSanitizerTest` and `MockAiGatewayTest.sparseProfileFallbackDoesNotInventActivityPreferences` | PASS |
+| Crisis language stays on the local route | Turkish/English crisis tests plus the ordinary-fatigue non-match test | PASS |
+| Airplane/provider failure remains usable | Combined emulator gate returned immediate `local_fallback` without a crash | PASS |
+| Repeated states avoid absurd repetition | Local fallback rotation and near-duplicate rejection tests | PASS |
+| AI never defines a threshold or calls the user addicted | Safety-language tests, prompt constraints, and local trigger ownership | PASS |
+
+The final local run executed 84 unit tests with zero failures, errors, or skipped tests.
+
+## Privacy/storage validation from source
+
+The current candidate stores profile/intervention state in app-private `esik_state.json`. Android backup rules explicitly exclude:
+
+- `esik_state.json`;
+- `esik_monitor.xml`.
+
+The same data is excluded from device-transfer extraction rules. The in-app delete action stops monitoring, clears cooldown state, and deletes the repository file.
+
+## Demo model configuration
+
+Validated combined demo configuration:
+
+```properties
+GEMINI_PROFILE_MODEL=gemini-2.5-flash-lite
+GEMINI_CARD_MODEL=gemini-2.5-flash-lite
+GEMINI_REPORT_MODEL=gemini-3.6-flash
+```
+
+The API key itself is never committed.
 
 ## Final verification commands
 
-```bash
-./gradlew test
-./gradlew assembleDebug
-```
-
-On Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 .\gradlew.bat test
 .\gradlew.bat assembleDebug
 .\gradlew.bat installDebug
 ```
+
+Monitor diagnostics:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" `
+  logcat -s EsikUsageMonitor:D "*:S"
+```
+
+AI diagnostics:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" `
+  logcat -s EsikAi:D "*:S"
+```
+
+## Deferred robustness checks
+
+These are useful edge-case work, not baseline blockers:
+
+- OEM-specific battery/background-killing behavior;
+- notification-permission differences across devices;
+- very long unattended service lifetime;
+- recognizer-provider cancellation races;
+- unusual timezone/clock transitions;
+- corrupted/migrated local-file fuzzing.
+
+Do not confuse these deferred robustness checks with unvalidated core functionality; the demo-critical end-to-end path has been validated on physical hardware.

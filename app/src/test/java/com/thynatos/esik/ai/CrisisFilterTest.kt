@@ -11,6 +11,16 @@ class CrisisFilterTest {
     }
 
     @Test
+    fun catchesEnglishSuicidalThoughtsPhrase() {
+        assertTrue(CrisisFilter.check("I'm having suicidal thoughts.").isCrisisSignal)
+    }
+
+    @Test
+    fun catchesEnglishWantToDiePhrase() {
+        assertTrue(CrisisFilter.check("Sometimes I want to die.").isCrisisSignal)
+    }
+
+    @Test
     fun doesNotFlagOrdinaryFatigueText() {
         assertFalse(CrisisFilter.check("Bugün yoruldum, biraz kafamı dağıtacağım.").isCrisisSignal)
     }

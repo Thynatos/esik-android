@@ -4,14 +4,18 @@ object SafetyLanguageValidator {
     private val blockedPhrases = setOf(
         "basarisiz oldun",
         "iraden zayif",
+        "cok kullandin",
+        "gereginden cok",
+        "cok uzun sure kullandin",
+        "fazla kullandin",
+        "asiri kullanim",
         "too much",
-        "a lot",
+        "you used it a lot",
         "you are addicted",
         "you failed",
         "lack of willpower",
     )
     private val blockedWords = setOf(
-        "cok",
         "fazla",
         "asiri",
         "bagimlisin",

@@ -1,7 +1,11 @@
 package com.thynatos.esik
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -9,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +36,7 @@ import com.thynatos.esik.ui.InterventionScreen
 import com.thynatos.esik.ui.OnboardingScreen
 import com.thynatos.esik.usage.UsageStatsReader
 import java.time.LocalDate
+import kotlinx.coroutines.launch
 
 private enum class AppScreen {
     ONBOARDING,
@@ -46,6 +52,7 @@ fun EsikApp(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     val usageReader = remember(context) { UsageStatsReader(context) }
     val installedApps = remember(context) { InstalledAppLoader.load(context) }
 
@@ -58,8 +65,15 @@ fun EsikApp(
     }
     var permissionRefreshNonce by remember { mutableIntStateOf(0) }
     var report by remember { mutableStateOf<DailyReport?>(null) }
+    var reportLoading by remember { mutableStateOf(false) }
     var screen by rememberSaveable {
         mutableStateOf(if (profile == null) AppScreen.ONBOARDING else AppScreen.HOME)
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        permissionRefreshNonce++
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -83,6 +97,9 @@ fun EsikApp(
     val canDrawOverlays = remember(context, permissionRefreshNonce) {
         PermissionNavigator.canDrawOverlays(context)
     }
+    val hasNotificationPermission = remember(context, permissionRefreshNonce) {
+        PermissionNavigator.hasNotificationPermission(context)
+    }
 
     LaunchedEffect(profile, permissionRefreshNonce) {
         currentUsageMinutes = profile?.let {
@@ -99,11 +116,18 @@ fun EsikApp(
         }
     }
 
+    BackHandler(
+        enabled = screen == AppScreen.INTERVENTION || screen == AppScreen.REPORT,
+    ) {
+        screen = AppScreen.HOME
+    }
+
     when (screen) {
         AppScreen.ONBOARDING -> OnboardingScreen(
             installedApps = installedApps,
             hasUsageAccess = hasUsageAccess,
             canDrawOverlays = canDrawOverlays,
+            aiGateway = aiGateway,
             onOpenUsagePermission = {
                 PermissionNavigator.openUsageAccessSettings(context)
             },
@@ -115,6 +139,7 @@ fun EsikApp(
                 UsageMonitorService.resetCooldown(context)
                 profile = newProfile
                 report = null
+                reportLoading = false
                 currentUsageMinutes = usageReader.todayUsageMinutes(newProfile.targetPackage)
                 screen = AppScreen.HOME
             },
@@ -128,6 +153,8 @@ fun EsikApp(
                 monitoringStarted = monitoringStarted,
                 hasUsageAccess = hasUsageAccess,
                 canDrawOverlays = canDrawOverlays,
+                hasNotificationPermission = hasNotificationPermission,
+                reportLoading = reportLoading,
                 onRefresh = {
                     permissionRefreshNonce++
                     currentUsageMinutes = usageReader.todayUsageMinutes(activeProfile.targetPackage)
@@ -139,6 +166,11 @@ fun EsikApp(
                 onOpenOverlayPermission = {
                     PermissionNavigator.openOverlaySettings(context)
                 },
+                onRequestNotificationPermission = {
+                    if (!hasNotificationPermission) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                },
                 onUpdateLimit = { limit ->
                     val updated = activeProfile.copy(dailyLimitMinutes = limit)
                     repository.saveProfile(updated)
@@ -149,6 +181,9 @@ fun EsikApp(
                 onStartMonitoring = {
                     UsageMonitorService.start(context)
                     monitoringStarted = true
+                    if (!hasNotificationPermission) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
                 },
                 onStopMonitoring = {
                     UsageMonitorService.stop(context)
@@ -165,16 +200,25 @@ fun EsikApp(
                     screen = AppScreen.INTERVENTION
                 },
                 onOpenReport = {
-                    val allRecords = repository.loadRecords()
-                    val today = LocalDate.now()
-                    val todayRecords = allRecords.filter { it.occursOn(today) }
-                    records = allRecords
-                    report = aiGateway.generateDailyReport(
-                        profile = activeProfile,
-                        records = todayRecords,
-                        currentUsageMinutes = currentUsageMinutes,
-                    )
-                    screen = AppScreen.REPORT
+                    if (!reportLoading) {
+                        val allRecords = repository.loadRecords()
+                        val today = LocalDate.now()
+                        val todayRecords = allRecords.filter { it.occursOn(today) }
+                        records = allRecords
+                        reportLoading = true
+                        scope.launch {
+                            try {
+                                report = aiGateway.generateDailyReport(
+                                    profile = activeProfile,
+                                    records = todayRecords,
+                                    currentUsageMinutes = currentUsageMinutes,
+                                )
+                                screen = AppScreen.REPORT
+                            } finally {
+                                reportLoading = false
+                            }
+                        }
+                    }
                 },
                 onLoadDemoData = {
                     val seeded = DemoDataSeeder.records()
@@ -189,6 +233,7 @@ fun EsikApp(
                     UsageMonitorService.stop(context)
                     UsageMonitorService.resetCooldown(context)
                     monitoringStarted = false
+                    reportLoading = false
                     repository.clearAll()
                     profile = null
                     records = emptyList()
@@ -204,12 +249,22 @@ fun EsikApp(
                 profile = activeProfile,
                 usageMinutes = interventionUsageMinutes,
                 aiGateway = aiGateway,
-                onChoice = { text, choice ->
+                recentRecords = records,
+                onChoice = { input, card, choice ->
                     val record = InterventionRecord(
                         timestampEpochMillis = System.currentTimeMillis(),
                         usageMinutes = interventionUsageMinutes,
-                        text = text,
+                        text = input.text,
                         choice = choice,
+                        stateId = input.stateId,
+                        stateLabel = input.stateLabel,
+                        inputMethod = input.method,
+                        aiQuestion = card.question,
+                        aiAlternative = card.alternative,
+                        aiReflection = card.reflection,
+                        aiActivityTitle = card.activityTitle,
+                        aiDurationMinutes = card.durationMinutes,
+                        aiStrategy = card.strategy,
                     )
                     repository.appendRecord(record)
                     records = records + record

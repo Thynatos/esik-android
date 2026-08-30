@@ -18,7 +18,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.thynatos.esik.MainActivity
 import com.thynatos.esik.R
-import com.thynatos.esik.ai.AnthropicAiGateway
+import com.thynatos.esik.ai.GeminiAiGateway
 import com.thynatos.esik.data.JsonEsikRepository
 import com.thynatos.esik.overlay.OverlayController
 import com.thynatos.esik.usage.CooldownPolicy
@@ -42,7 +42,7 @@ class UsageMonitorService : Service() {
         isDebuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         repository = JsonEsikRepository(this)
         usageStatsReader = UsageStatsReader(this)
-        overlayController = OverlayController(this, repository, AnthropicAiGateway())
+        overlayController = OverlayController(this, repository, GeminiAiGateway())
         executor = Executors.newSingleThreadScheduledExecutor()
         setMonitoringEnabled(true)
         promoteToForeground()
@@ -61,7 +61,7 @@ class UsageMonitorService : Service() {
 
     override fun onDestroy() {
         if (::executor.isInitialized) executor.shutdownNow()
-        if (::overlayController.isInitialized) overlayController.dismiss()
+        if (::overlayController.isInitialized) overlayController.close()
         debugState("service destroyed")
         super.onDestroy()
     }
@@ -156,7 +156,7 @@ class UsageMonitorService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(R.drawable.ic_esik_notification)
             .setContentTitle(getString(R.string.monitor_notification_title))
             .setContentText(getString(R.string.monitor_notification_text))
             .setContentIntent(pendingIntent)
@@ -192,7 +192,7 @@ class UsageMonitorService : Service() {
         private const val CHANNEL_ID = "esik_usage_monitor"
         private const val NOTIFICATION_ID = 1001
         private const val INITIAL_DELAY_SECONDS = 2L
-        private const val POLL_INTERVAL_SECONDS = 60L
+        private const val POLL_INTERVAL_SECONDS = 5L
         private const val PREFERENCES_NAME = "esik_monitor"
         private const val KEY_LAST_SHOWN_AT = "last_overlay_at"
         private const val KEY_MONITORING_ENABLED = "monitoring_enabled"

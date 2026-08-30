@@ -2,5 +2,14 @@
 # Never commit local.properties.
 sdk.dir=/absolute/path/to/Android/Sdk
 
-# Hackathon-only option. Do not ship an Anthropic API key inside a production APK.
-# ANTHROPIC_API_KEY=replace_me
+# Hackathon-only direct mobile integration.
+# Never commit a real key and never ship this architecture to production.
+# Production requires a backend proxy with server-held credentials and abuse controls.
+GEMINI_API_KEY=
+
+# Optional model overrides. The app falls back locally if a model is unavailable.
+# This example matches the final combined QA configuration used for the demo build.
+GEMINI_FAST_MODEL=gemini-2.5-flash-lite
+GEMINI_PROFILE_MODEL=gemini-2.5-flash-lite
+GEMINI_CARD_MODEL=gemini-2.5-flash-lite
+GEMINI_REPORT_MODEL=gemini-3.6-flash

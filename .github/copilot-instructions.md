@@ -1,52 +1,92 @@
-# Eşik repository instructions for GitHub Copilot
+# Eşik repository instructions for coding agents
 
-Eşik is a two-day Android hackathon prototype for digital wellbeing. It monitors one user-selected app. When numeric use reaches the user’s own daily limit, it may show an intervention at most once every 15 minutes while that app is active. It asks what is happening, generates a neutral personalized card, and records whether the user continued or stopped.
+Eşik is an Android digital-wellbeing prototype. It monitors one user-selected app and compares its local usage with a daily threshold chosen by the user. When the selected app is foreground and the threshold is reached, Eşik can show a system overlay, ask for current context, produce a short personalized reflection/micro-alternative, and record whether the user intentionally continued or tried something else.
+
+## Source of truth
+
+Before changing code, read:
+
+- `docs/PRODUCT_SPEC.md`
+- `docs/DATA_SCHEMA.md`
+- `docs/FINALIZATION.md`
+- `docs/AI_EVALUATION.md` for AI behavior changes
+
+The active integration baseline is `feature/final-integration`. Old `work/*`, UI sprint, AI-quality sprint, and handoff branches are historical.
+
+## Frozen Git workflow
+
+Frozen topology:
+
+```text
+main
+  ^
+  | PR #7
+  |
+feature/final-integration (frozen)
+```
+
+Rules:
+
+- Never develop directly on `main`.
+- Never add new work to old sprint branches.
+- Absolute feature freeze was declared after PR #18.
+- Do not add behavior inference, reports, screens, redesigns, polling changes, prompt/model changes, or experiments.
+- Reopen code only for a reproduced crash or demo-blocking defect, using one narrow `fix/<name>` branch from the latest `feature/final-integration`.
+- Run `./gradlew test` and `./gradlew assembleDebug` and retest the affected device path before integration.
+- Merge blocker fixes back into `feature/final-integration`; PR #7 remains the single final PR to `main`.
+- Do not merge PR #7 unless the project owner explicitly requests final merge.
 
 ## Non-negotiable product rules
 
-- Keep exactly four product screens: onboarding, home, intervention, daily report. Debug controls stay on Home.
-- Never diagnose addiction or any medical or mental-health condition.
-- Never decide or describe what is “too much.” Refer only to the user’s own target and numeric usage.
-- Do not use “çok,” “fazla,” “aşırı,” “too much,” or “excessive” in generated interpretations of behavior.
-- Avoid shame, accusation, moralizing, causal certainty, and retrospective blame.
-- Run the crisis filter locally before every remote AI request. On a crisis match, do not call AI and do not transmit the text.
-- With fewer than seven records on the current local date, do not call the report model; show an insufficient-data state.
-- Compute all counts and durations locally. Never delegate arithmetic to a model.
-- Keep user data on-device and preserve the clear-data action.
-- Never commit API keys. Mobile-direct Anthropic access is hackathon-only; production requires a proxy.
+- The user sets the threshold. AI never recommends, judges, or changes it.
+- Never diagnose addiction or any medical/mental-health condition.
+- Never label the person from a context such as procrastination.
+- Avoid shame, accusation, moralizing, unsupported causal certainty, and retrospective blame.
+- Crisis-signalling external text must be gated locally and must not enter the normal Gemini/repair path.
+- With fewer than seven current-date records, do not call the report model.
+- Compute counts, durations, and evidence aggregates locally.
+- Keep profile/intervention records on-device and preserve the clear-data action.
+- Preserve Android backup/device-transfer exclusions for app state.
+- Never commit API keys or `local.properties`.
+- Direct mobile Gemini access is hackathon-only; production requires a safer credential/backend design.
 
-## Current architecture and ownership
+## Current architecture
 
-- Android app: Kotlin, Jetpack Compose, min SDK 26, compile SDK 37, target SDK 36.
-- `data/`: frozen contract and device-local JSON repository.
-- `ui/`: exactly four product screens.
-- `permissions/`, `usage/`, `monitor/`, `overlay/`: Android-core territory.
-- `ai/`: interface, deterministic mock, prompts, crisis filter, language validator, and real-network seam.
-- `EsikApp.kt`: integration boundary; coordinate before editing because all three roles may depend on it.
-- Preserve `MockAiGateway` before and after real networking is added so UI work and demos never depend on the API.
+- Kotlin + Jetpack Compose, min SDK 26, compile SDK 37, target SDK 36.
+- `data/`: device-local models, JSON repository, demo seeding.
+- `ui/`: four in-app product screens.
+- `overlay/`: real `TYPE_APPLICATION_OVERLAY` intervention.
+- `permissions/`, `usage/`, `monitor/`: Android-core behavior.
+- `ai/`: Gemini client/gateway, prompt contracts, local policy compiler, grounding/safety validators, deterministic fallback.
+- `EsikApp.kt`: integration/navigation boundary.
 
-## Execution order
+The system overlay is an Android surface in addition to the four Compose screens; do not create unnecessary product screens for small features.
 
-1. Read `docs/DATA_SCHEMA.md` and preserve the frozen contract.
-2. Keep the mock path working.
-3. Prove Usage Access and overlay permissions.
-4. Pass the Saturday noon checkpoint on a physical phone: selected app active + limit reached -> overlay visible.
-5. Connect overlay choices to local records and cooldown behavior.
-6. Add real AI behind `AiGateway`, asynchronously, with strict JSON parsing, timeouts, validation, and deterministic fallback.
-7. Add report synthesis only after the intervention loop is stable.
+## AI behavior
+
+Current validated demo configuration:
+
+- profile: `gemini-2.5-flash-lite`
+- card: `gemini-2.5-flash-lite`
+- daily report: `gemini-3.6-flash`
+
+These remain locally configurable. Keep `MockAiGateway` working regardless of live-provider availability.
+
+Before a live card request, the app compiles authoritative local policy (need, energy, objective, allowed strategies, max duration, allowed anchors, forbidden patterns). Gemini must fit that policy, structured output must be semantically validated, and only one repair attempt is allowed before fallback.
+
+Do not request or claim chain-of-thought. Prompt design is structured + compact contrastive few-shot examples + local validation.
 
 ## Engineering rules
 
-- Inspect actual files before editing and report plan/code mismatches first.
-- Implement one vertical slice at a time; validate after each meaningful slice.
-- Keep the 60-second poll interval and 15-minute cooldown as named constants.
+- Inspect actual files before editing; do not assume old handoff paths are current.
+- Prefer narrow changes over architecture-heavy refactors during the hackathon.
+- Keep the owner-approved 5-second monitor polling and 15-minute cooldown unless a later product decision explicitly changes them.
 - Do not use Accessibility Service as a shortcut.
-- Treat permission denial, target app missing, screen locked, midnight, overlay already visible, clock changes, service stop, reboot, and OEM battery behavior as explicit test cases.
-- Prefer small readable files and narrow interfaces over architecture-heavy refactors.
-- Do not add accounts, cloud databases, analytics SDKs, streaks, gamification, or unrelated features.
-- Add or update pure unit tests for cooldown, crisis filtering, language validation, daily eligibility, and local-date grouping.
-- After the standard wrapper is generated, run `./gradlew test` and `./gradlew assembleDebug` when an Android SDK is available.
+- Do not silently remove privacy/safety/fallback behavior to make a feature easier.
+- For pure logic, add/update unit tests.
+- For overlay/monitor/voice changes, validate on a physical phone when possible.
+- For AI changes, run the relevant golden scenarios in `docs/AI_EVALUATION.md` and test offline fallback when networking changed.
 
 ## Language
 
-User-facing demo copy is Turkish. Code, comments, commit messages, and technical documentation are English. Numeric reports use no adjectives. Observations are questions. Each valid daily report has one micro-step.
+User-facing copy is Turkish. Code, comments, commit messages, and technical documentation are primarily English. Report observations remain tentative questions; each eligible report has one micro-step.

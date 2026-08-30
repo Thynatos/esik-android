@@ -7,15 +7,33 @@ import java.time.ZoneId
 object DemoDataSeeder {
     /**
      * Creates records across four local dates while keeping eight non-future records on the
-     * current date. This lets the daily-report path be demonstrated without losing multi-day
-     * seed data.
+     * current date. The records include quick-state and generated-card metadata so the daily AI
+     * report can demonstrate adaptation instead of analysing empty placeholders.
      */
     fun records(now: LocalDateTime = LocalDateTime.now()): List<InterventionRecord> {
         val zone = ZoneId.systemDefault()
         val historical = listOf(
-            HistoricalSample(3, 21, 40, 71, "uyumadan önce bakacaktım", UserChoice.CONTINUE),
-            HistoricalSample(2, 18, 20, 74, "dersten sonra kafamı dağıtıyorum", UserChoice.CONTINUE),
-            HistoricalSample(1, 22, 55, 79, "bildirim geldi", UserChoice.STOPPED),
+            HistoricalSample(
+                3, 21, 40, 71,
+                "uyumadan önce bakacaktım",
+                "late_night",
+                "Uyumadan önce bakıyorum",
+                UserChoice.CONTINUE,
+            ),
+            HistoricalSample(
+                2, 18, 20, 74,
+                "dersten sonra kafamı dağıtıyorum",
+                "tired",
+                "Biraz yoruldum",
+                UserChoice.CONTINUE,
+            ),
+            HistoricalSample(
+                1, 22, 55, 79,
+                "bildirim geldi ama şimdi bakmam gerekmiyor",
+                "habit",
+                "Alışkanlıkla açtım",
+                UserChoice.STOPPED,
+            ),
         ).map { sample ->
             val dateTime = now
                 .minusDays(sample.daysAgo.toLong())
@@ -27,14 +45,14 @@ object DemoDataSeeder {
         }
 
         val todaySamples = listOf(
-            TodaySample(63, "alışkanlıkla açtım", UserChoice.STOPPED),
-            TodaySample(68, "bir mesaja bakacaktım", UserChoice.CONTINUE),
-            TodaySample(72, "ara verirken açtım", UserChoice.CONTINUE),
-            TodaySample(77, "biraz oyalanmak istedim", UserChoice.STOPPED),
-            TodaySample(83, "ne yapacağımı düşünmeden açtım", UserChoice.CONTINUE),
-            TodaySample(89, "bugün yoruldum", UserChoice.CONTINUE),
-            TodaySample(96, "arkadaşımın paylaşımına bakacaktım", UserChoice.STOPPED),
-            TodaySample(104, "uyumadan önce biraz bakacaktım", UserChoice.CONTINUE),
+            TodaySample(63, "alışkanlıkla açtım", "habit", "Alışkanlıkla açtım", UserChoice.STOPPED),
+            TodaySample(68, "bir mesaja bakacaktım", "waiting", "Bir şeyi bekliyorum", UserChoice.CONTINUE),
+            TodaySample(72, "ara verirken açtım", "relaxing", "Sadece kafa dağıtıyorum", UserChoice.CONTINUE),
+            TodaySample(77, "biraz oyalanmak istedim", "bored", "Biraz sıkıldım", UserChoice.STOPPED),
+            TodaySample(83, "çalışmaya başlamayı erteliyorum", "procrastinating", "Bir şeyi erteliyorum", UserChoice.CONTINUE),
+            TodaySample(89, "bugün yoruldum", "tired", "Biraz yoruldum", UserChoice.CONTINUE),
+            TodaySample(96, "ödeve başlamadan önce kaçıyorum", "procrastinating", "Bir şeyi erteliyorum", UserChoice.STOPPED),
+            TodaySample(104, "uyumadan önce biraz bakacaktım", "late_night", "Uyumadan önce bakıyorum", UserChoice.CONTINUE),
         )
         val startOfToday = now.toLocalDate().atStartOfDay()
         val elapsedSeconds = Duration.between(startOfToday, now).seconds.coerceAtLeast(0L)
@@ -51,22 +69,62 @@ object DemoDataSeeder {
     private fun HistoricalSample.toRecord(
         dateTime: LocalDateTime,
         zone: ZoneId,
-    ): InterventionRecord = InterventionRecord(
-        timestampEpochMillis = dateTime.atZone(zone).toInstant().toEpochMilli(),
+    ): InterventionRecord = enrichedRecord(
+        dateTime = dateTime,
+        zone = zone,
         usageMinutes = usageMinutes,
         text = text,
+        stateId = stateId,
+        stateLabel = stateLabel,
         choice = choice,
     )
 
     private fun TodaySample.toRecord(
         dateTime: LocalDateTime,
         zone: ZoneId,
+    ): InterventionRecord = enrichedRecord(
+        dateTime = dateTime,
+        zone = zone,
+        usageMinutes = usageMinutes,
+        text = text,
+        stateId = stateId,
+        stateLabel = stateLabel,
+        choice = choice,
+    )
+
+    private fun enrichedRecord(
+        dateTime: LocalDateTime,
+        zone: ZoneId,
+        usageMinutes: Int,
+        text: String,
+        stateId: String,
+        stateLabel: String,
+        choice: UserChoice,
     ): InterventionRecord = InterventionRecord(
         timestampEpochMillis = dateTime.atZone(zone).toInstant().toEpochMilli(),
         usageMinutes = usageMinutes,
         text = text,
         choice = choice,
+        stateId = stateId,
+        stateLabel = stateLabel,
+        inputMethod = InterventionInputMethod.QUICK_REPLY,
+        aiQuestion = questionFor(stateId),
+        aiAlternative = alternativeFor(stateId),
     )
+
+    private fun questionFor(stateId: String): String = when (stateId) {
+        "tired" -> "Şu anda kısa bir dinlenme mi, yoksa otomatik bir kaydırma mı arıyorsun?"
+        "procrastinating" -> "Ertelediğin şeyin yalnızca ilk iki dakikasını yapmak daha ulaşılabilir olabilir mi?"
+        "relaxing" -> "Bu molayı ne kadar sürdürmek istediğini baştan seçmek işine yarar mı?"
+        else -> "Bu açılışın bilinçli bir seçim olup olmadığını ayırmak yardımcı olabilir mi?"
+    }
+
+    private fun alternativeFor(stateId: String): String = when (stateId) {
+        "tired" -> "Bir şarkı boyunca telefonu bırakıp gözlerini dinlendirebilirsin."
+        "procrastinating" -> "Ertelediğin işin yalnızca ilk iki dakikasını yapabilirsin."
+        "relaxing" -> "10 dakikalık bir zamanlayıcı kurup sonra yeniden karar verebilirsin."
+        else -> "İki dakika boyunca telefonu bırakıp sonra yeniden karar verebilirsin."
+    }
 
     private data class HistoricalSample(
         val daysAgo: Int,
@@ -74,12 +132,16 @@ object DemoDataSeeder {
         val minute: Int,
         val usageMinutes: Int,
         val text: String,
+        val stateId: String,
+        val stateLabel: String,
         val choice: UserChoice,
     )
 
     private data class TodaySample(
         val usageMinutes: Int,
         val text: String,
+        val stateId: String,
+        val stateLabel: String,
         val choice: UserChoice,
     )
 }

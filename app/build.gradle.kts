@@ -1,7 +1,40 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { input -> load(input) }
+    }
+}
+
+fun String.asBuildConfigString(): String =
+    "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+val geminiApiKey = localProperties.getProperty(
+    "GEMINI_API_KEY",
+    localProperties.getProperty("GOOGLE_API_KEY", ""),
+)
+val geminiFastModel = localProperties.getProperty(
+    "GEMINI_FAST_MODEL",
+    "gemini-2.5-flash-lite",
+)
+val geminiProfileModel = localProperties.getProperty(
+    "GEMINI_PROFILE_MODEL",
+    geminiFastModel,
+)
+val geminiCardModel = localProperties.getProperty(
+    "GEMINI_CARD_MODEL",
+    geminiFastModel,
+)
+val geminiReportModel = localProperties.getProperty(
+    "GEMINI_REPORT_MODEL",
+    "gemini-3.6-flash",
+)
 
 android {
     namespace = "com.thynatos.esik"
@@ -15,6 +48,11 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GEMINI_API_KEY", geminiApiKey.asBuildConfigString())
+        buildConfigField("String", "GEMINI_FAST_MODEL", geminiFastModel.asBuildConfigString())
+        buildConfigField("String", "GEMINI_PROFILE_MODEL", geminiProfileModel.asBuildConfigString())
+        buildConfigField("String", "GEMINI_CARD_MODEL", geminiCardModel.asBuildConfigString())
+        buildConfigField("String", "GEMINI_REPORT_MODEL", geminiReportModel.asBuildConfigString())
     }
 
     buildTypes {
@@ -29,6 +67,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
@@ -57,4 +96,6 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 
     testImplementation(libs.junit)
+    // JVM JSON implementation so repository persistence tests run without Android stubs.
+    testImplementation("org.json:json:20240303")
 }
