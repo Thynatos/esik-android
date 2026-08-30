@@ -9,17 +9,16 @@ Read these before editing:
 
 ## Current repository state
 
-The validated integration baseline is `feature/final-integration`. The earlier role/parallel sprint branches are implementation history and must not receive new work.
+The validated integration baseline is `feature/final-integration`. The earlier role/parallel sprint branches are implementation history and must not receive new work. Absolute feature freeze was declared after PR #18.
 
-For optional features:
+Do not add behavior inference, reports, screens, redesigns, polling changes, prompt/model changes, or experiments. Reopen code only for a reproduced crash or demo-blocking defect. Any such fix must:
 
-1. fetch/pull the latest `feature/final-integration`;
-2. create one narrow `feature/<name>` branch from it;
-3. do not create a second integration branch;
-4. run `./gradlew test` and `./gradlew assembleDebug` before pushing/merging;
-5. perform the smallest emulator/physical-device check that exercises the changed behavior;
-6. merge the feature back into `feature/final-integration` through review;
-7. keep PR #7 as the single final PR from the integration candidate to `main`.
+1. start from the latest `feature/final-integration` on one narrow `fix/<name>` branch;
+2. avoid a second integration branch;
+3. run `./gradlew test` and `./gradlew assembleDebug`;
+4. perform the smallest emulator/physical-device check that exercises the fix;
+5. merge back into `feature/final-integration` through review;
+6. keep PR #7 as the single final PR from the frozen candidate to `main`.
 
 Do not merge PR #7 to `main` unless the project owner explicitly requests the final merge.
 

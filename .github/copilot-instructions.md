@@ -13,30 +13,27 @@ Before changing code, read:
 
 The active integration baseline is `feature/final-integration`. Old `work/*`, UI sprint, AI-quality sprint, and handoff branches are historical.
 
-## Active Git workflow
+## Frozen Git workflow
 
-For new optional work:
+Frozen topology:
 
 ```text
 main
   ^
   | PR #7
   |
-feature/final-integration
-  ^
-  |
-feature/<small-feature>
+feature/final-integration (frozen)
 ```
 
 Rules:
 
 - Never develop directly on `main`.
 - Never add new work to old sprint branches.
-- Start each feature from the latest `feature/final-integration`.
-- Keep the branch to one coherent feature/fix.
-- Run `./gradlew test` and `./gradlew assembleDebug` before integration.
-- Retest the smallest device path affected by the change.
-- Merge features back into `feature/final-integration`; PR #7 remains the single final PR to `main`.
+- Absolute feature freeze was declared after PR #18.
+- Do not add behavior inference, reports, screens, redesigns, polling changes, prompt/model changes, or experiments.
+- Reopen code only for a reproduced crash or demo-blocking defect, using one narrow `fix/<name>` branch from the latest `feature/final-integration`.
+- Run `./gradlew test` and `./gradlew assembleDebug` and retest the affected device path before integration.
+- Merge blocker fixes back into `feature/final-integration`; PR #7 remains the single final PR to `main`.
 - Do not merge PR #7 unless the project owner explicitly requests final merge.
 
 ## Non-negotiable product rules

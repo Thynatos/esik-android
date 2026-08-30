@@ -13,6 +13,8 @@ Read these for any new work:
 5. `AI_EVALUATION.md` — AI quality/safety scenarios and observed final-gate results
 6. `AI_DEVICE_QA.md` — device procedures for live/offline AI checks
 7. `VALIDATION.md` — Android/emulator/physical validation record
+8. `HACKATHON_REPORT.md` — submission-ready 1–2 page project report
+9. `DEMO_SCRIPT.md` — frozen five-minute route and recording gate
 
 Repository-level coding instructions live in `../AGENTS.md`, `../COPILOT_PROMPT.md`, and `../.github/copilot-instructions.md`.
 
@@ -44,9 +46,6 @@ main
   | PR #7
   |
 feature/final-integration
-  ^
-  |
-feature/<small-feature>
 ```
 
-Optional features start from the latest `feature/final-integration`, get proportional test/device validation, and merge back there. PR #7 remains the single final PR to protected `main` until the project owner requests final freeze/merge.
+The repository is under absolute feature freeze. Only a reproduced crash or demo-blocking defect may branch from `feature/final-integration`. PR #7 remains the single final PR to protected `main`; it must not be merged without the project owner's explicit final authorization.

@@ -4,6 +4,8 @@ applyTo: "app/src/main/**/*.kt,app/src/main/AndroidManifest.xml,app/build.gradle
 
 Use Android platform APIs conservatively and verify behavior against the project target SDK. Keep foreground-service startup user-initiated. `SYSTEM_ALERT_WINDOW` and Usage Access are Settings-granted special permissions, not ordinary runtime permissions. Do not use Accessibility Service as a shortcut.
 
+The repository is under absolute feature freeze. Android changes are allowed only for a reproduced crash or demo-blocking defect; do not alter polling, overlay policy, permissions, navigation, or UI as an experiment.
+
 The validated Android baseline already covers Usage Access, foreground monitoring, target detection, threshold triggering, the real overlay, cooldown, lock/unlock behavior, restart/persistence, voice, and both final decisions on physical hardware.
 
 For a new Android change, validate proportionally:

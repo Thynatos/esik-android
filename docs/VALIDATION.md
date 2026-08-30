@@ -96,6 +96,33 @@ Confirmed:
 - both final decisions dismiss correctly;
 - seeded daily report opens and completes successfully.
 
+## Post-merge polling/finalization smoke — 2026-08-30
+
+Device: Xiaomi 2311DRK48G, Android 15.
+
+- The current `feature/final-integration` APK installed successfully.
+- The launcher icon and persistent `Eşik aktif` monitoring notification were visible.
+- Android Back returned from the report to Home.
+- The delete-data confirmation appeared and was cancelled without deleting data.
+- Above the user-defined threshold, the Instagram overlay was logged 6.0 seconds after launch.
+- Reopening Instagram during cooldown produced no second overlay; 866 seconds remained.
+- At four current-day records, the report returned the local insufficient-data state and made no Gemini call.
+
+The live seven-record report was validated in the combined AI + UI gate. The post-polish loading label was not re-exercised in the last phone pass because the device had only four current-day records; the product owner ended further in-app testing and accepted the build. No behavior code changed after this smoke pass.
+
+## Final ethics regression
+
+| Requirement | Evidence | Result |
+|---|---|---|
+| Intentional rest is not shamed | `InterventionContextBuilderTest.intentionalRestPreservesAutonomyWithTimedUseStrategy` plus the validated intentional-continue flow | PASS |
+| Sparse profiles do not invent hobbies | `ProfileGroundingSanitizerTest` and `MockAiGatewayTest.sparseProfileFallbackDoesNotInventActivityPreferences` | PASS |
+| Crisis language stays on the local route | Turkish/English crisis tests plus the ordinary-fatigue non-match test | PASS |
+| Airplane/provider failure remains usable | Combined emulator gate returned immediate `local_fallback` without a crash | PASS |
+| Repeated states avoid absurd repetition | Local fallback rotation and near-duplicate rejection tests | PASS |
+| AI never defines a threshold or calls the user addicted | Safety-language tests, prompt constraints, and local trigger ownership | PASS |
+
+The final local run executed 84 unit tests with zero failures, errors, or skipped tests.
+
 ## Privacy/storage validation from source
 
 The current candidate stores profile/intervention state in app-private `esik_state.json`. Android backup rules explicitly exclude:

@@ -1,10 +1,12 @@
 # Eşik Baseline Finalization
 
-This document is the source of truth for the current hackathon baseline before optional feature work continues.
+This document is the source of truth for the frozen hackathon submission candidate.
 
 Baseline branch: `feature/final-integration`
 
-The goal of this pass is to finish the current product and repository workflow first. Optional features should branch from this known-good baseline rather than being mixed into unresolved integration work.
+Feature freeze was declared on 2026-08-30 after PR #18. No new behavior inference, reports, screens, redesigns, polling experiments, or AI experiments are allowed. Only a crash or a demonstrated demo-blocking defect may reopen code work.
+
+Final Android version: `versionName 0.1.0`, `versionCode 1`.
 
 ## Product status
 
@@ -15,8 +17,8 @@ The goal of this pass is to finish the current product and repository workflow f
 | User-defined threshold | PASS | Threshold is always entered/changed by the user. AI does not choose it. |
 | Usage Access | PASS | Guided system-settings flow validated. |
 | Usage measurement | PASS | `UsageStatsManager` values validated against the selected target app. |
-| Foreground monitoring | IMPLEMENTED / device retest required | Foreground service now polls every 5 seconds for responsive target-app detection; focused physical-device timing validation remains. |
-| Monitoring notification | IMPLEMENTED | Android 13+ notification permission is requested contextually when monitoring starts, remains optional for core tracking, and can be repaired from Home. |
+| Foreground monitoring | PASS | Foreground service polls every 5 seconds; the post-merge phone pass measured the target-app overlay at 6.0 seconds. |
+| Monitoring notification | PASS | Android 13+ notification permission remains optional; the explicit Eşik foreground notification was visible on the final phone build. |
 | Threshold trigger | PASS | Real target-app trigger validated on physical Android hardware. |
 | Cooldown | PASS | 15-minute cooldown works; changing the limit resets it for testing. |
 | System overlay | PASS | `TYPE_APPLICATION_OVERLAY` appears above the target app and is usable on the physical phone. |
@@ -28,15 +30,15 @@ The goal of this pass is to finish the current product and repository workflow f
 | Repair/fallback | PASS | One repair attempt is bounded; deterministic local fallback remains usable offline. |
 | Intentional continuation | PASS | User can intentionally continue; no forced blocking. |
 | Stop/try alternative action | PASS | User can dismiss the target-app moment and return toward launcher/home. |
-| In-app navigation | IMPLEMENTED | Android system Back from Compose intervention/report returns Home rather than unexpectedly exiting the activity. |
+| In-app navigation | PASS | Android system Back from the report returned Home on the final phone build. |
 | Local records | PASS | Intervention records persist locally in app-private JSON storage. |
 | Daily report threshold | PASS | Live synthesis is withheld below seven records. |
 | Daily report counts | PASS | Numeric facts are computed locally. |
 | Daily report AI | PASS | Evidence-constrained live report validated after gateway fixes. |
 | Daily report loading UX | IMPLEMENTED | Home now shows/disables the report action while the reflection is being generated instead of appearing frozen. |
-| Data deletion | PASS / polished | Clear-data logic was validated; the action is now visible in a product-level data section and requires destructive confirmation. |
+| Data deletion | PASS | The final phone build displayed the destructive confirmation; the test cancelled safely without deleting data. |
 | Backup privacy | PASS | Profile/records and monitoring preferences are excluded from cloud backup and device transfer. |
-| App identity | IMPLEMENTED | Explicit Eşik launcher/round icon and foreground-monitor notification icon replace generic/default identity. |
+| App identity | PASS | The final phone build displayed the explicit Eşik launcher and foreground-notification identities. |
 | CI | PASS / simplified | CI runs for PRs into `feature/final-integration` or `main`, plus pushes to `main`, avoiding duplicate feature-push + PR runs. |
 
 ## Combined QA gate — 2026-08-30
@@ -77,7 +79,32 @@ Confirmed:
 - both final decisions dismiss correctly;
 - seeded daily report opens and generates successfully.
 
-A finalization-only polish pass was added afterward: launcher/notification icons, report loading state, visible/confirmed data deletion, standard system-Back routing, and Android 13+ monitoring-notification permission handling. A later release-blocker fix reduced foreground polling from 60 seconds to 5 seconds so an already-running monitor detects the target app promptly. After pulling the latest candidate, these additions and the faster polling need a short physical-device smoke check; they do not change the threshold, cooldown, overlay, or AI decision policy.
+A finalization-only polish pass added launcher/notification icons, report loading state, visible/confirmed data deletion, standard system-Back routing, and Android 13+ monitoring-notification permission handling. PR #18 then reduced foreground polling from 60 seconds to 5 seconds without changing the threshold, cooldown, overlay, or AI decision policy.
+
+### Post-merge finalization smoke — 2026-08-30
+
+Device: Xiaomi 2311DRK48G, Android 15.
+
+Confirmed on the current `feature/final-integration` build:
+
+- latest debug APK installed and monitoring resumed after reopening Eşik;
+- launcher identity and the persistent `Eşik aktif` notification were visible;
+- Android Back returned from the report to Home;
+- delete-data confirmation appeared and was cancelled without deleting data;
+- with 178 minutes of Instagram use and the user-defined 30-minute threshold, the real overlay appeared after 6.0 seconds;
+- reopening Instagram was suppressed by the existing cooldown; the monitor reported 866 seconds remaining;
+- with four current-day records, the report correctly used the local insufficient-data route and did not call Gemini.
+
+The live seven-record report was validated during the combined gate above. The post-polish loading label was not re-exercised in the last phone pass because the device had only four current-day records; the product owner ended further in-app testing and accepted the build. No app behavior changed after this post-merge smoke pass. The exact device result is also recorded on PR #18.
+
+## Absolute feature freeze
+
+- PR #16 is closed and was not integrated.
+- PR #17 was superseded after a GitHub draft-transition failure.
+- PR #18 contains the identical validated five-second polling fix and is merged into `feature/final-integration`.
+- PR #7 is the only open product PR and remains the final candidate to `main`.
+- Do not add behavior inference, reports, screens, redesigns, polling changes, prompt/model changes, or experiments.
+- A new branch is permitted only for a reproduced crash or demo-blocking defect, with proportional validation.
 
 ## AI configuration used for the validated demo build
 
@@ -109,50 +136,52 @@ The current baseline intentionally includes these controls:
 
 ## Baseline repository workflow
 
-The earlier role branches and parallel UI/AI branches are finished implementation history. PRs #2, #4, and #5 are closed as superseded. PR #7 is the single final integration PR and targets protected `main` directly.
+The earlier role branches and parallel UI/AI branches are finished implementation history. PR #7 is the single final integration PR and targets protected `main` directly.
 
 ```text
 main
   ^
-  | PR #7 (single final submission PR; keep draft while optional features continue)
+  | PR #7 (single final submission PR; explicit owner authorization required to merge)
   |
-feature/final-integration
-  ^
-  |
-feature/<small-feature>
+feature/final-integration (frozen)
 ```
 
 ### Rules
 
 1. `main` stays protected and receives no direct development commits.
-2. `feature/final-integration` is the current known-good candidate.
-3. Every optional feature begins from the latest `feature/final-integration`.
-4. A feature branch owns one coherent change; avoid mixing unrelated polish or refactors.
-5. Open the feature PR back into `feature/final-integration`; CI runs there.
-6. Run `test` and `assembleDebug` and perform the smallest device check that exercises the changed behavior.
-7. PR #7 remains the single final PR to `main` until feature work stops.
-8. Do not merge PR #7 without the project owner's explicit final-merge request.
-9. At final freeze, mark PR #7 ready, obtain the required approval, squash-merge to `main`, and rotate/delete the hackathon API key after the demo/submission.
+2. `feature/final-integration` is the frozen known-good candidate.
+3. Do not begin optional feature work. Reopen code only for a reproduced crash or demo-blocking defect.
+4. Any blocker fix must use one narrow branch, pass `test` and `assembleDebug`, and retest the affected path.
+5. PR #7 remains the single final PR to `main`.
+6. Mark PR #7 ready after finalization documents are integrated and obtain the required teammate approval.
+7. Do not merge PR #7 without the project owner's explicit final-merge request.
+8. After the demo/submission, rotate or revoke the hackathon API key.
 
 Current instructions are synchronized across `AGENTS.md`, `COPILOT_PROMPT.md`, `.github/copilot-instructions.md`, `.github/prompts/esik-build.prompt.md`, and `.github/instructions/android.instructions.md`. `docs/README.md` separates current source-of-truth documents from historical sprint/handoff material.
 
 ## Non-feature release gates
 
-These are final release/submission tasks, not new product features:
+Completed finalization gates:
 
-- keep GitHub Actions green after each integrated feature;
-- after the latest finalization polish, do one short install/physical-device smoke check for the launcher icon, monitoring notification/permission, report-loading state, data-delete confirmation, system Back behavior, and an above-threshold overlay appearing within about 5–10 seconds of opening the target app;
-- update this document when a feature changes the validated demo route;
-- run the exact final demo route twice consecutively after the last optional feature is merged;
-- capture a backup screen recording of the final demo route;
-- set the final version name/code only after optional feature work stops;
-- verify the API key is present only on the demo machine/phone build and not in Git history;
-- prepare the required 1–2 page hackathon report and roughly five-minute demo;
-- after submission/demo, rotate or revoke the embedded hackathon key.
+- GitHub Actions green on PR #18 and the updated PR #7 candidate;
+- post-polish install/physical-device smoke pass completed;
+- final version confirmed as `0.1.0` / `1`;
+- `local.properties` is ignored and untracked, and no Google API-key literal or committed `local.properties` exists in Git history;
+- final ethics regression passed through the automated safety/grounding suite plus the previously validated offline device route;
+- the 1–2 page report and frozen five-minute demo runbook are in `HACKATHON_REPORT.md` and `DEMO_SCRIPT.md`.
+
+Remaining human submission gates:
+
+- run the exact frozen demo route twice consecutively;
+- capture the primary and backup screen recordings;
+- obtain the required teammate approval on PR #7;
+- explicitly authorize and perform the final squash merge to `main`;
+- submit the repository/prototype, report, and video;
+- rotate or revoke the embedded hackathon key after the presentation/submission.
 
 ## Deliberately deferred edge cases
 
-The following are useful robustness work but are not blockers for the baseline and should not be mixed into product-feature work unless time remains:
+The following are useful robustness work but are not blockers for the baseline and remain deferred during feature freeze:
 
 - OEM-specific background killing/battery restrictions;
 - OEM-specific notification-channel/task-manager presentation differences;
@@ -162,13 +191,13 @@ The following are useful robustness work but are not blockers for the baseline a
 - exhaustive migration/corrupt-file fuzzing;
 - localization beyond the current Turkish product experience.
 
-## Optional feature branch template
+## Emergency blocker branch template
 
 ```powershell
 git fetch origin
 git switch feature/final-integration
 git pull --ff-only
-git switch -c feature/<feature-name>
+git switch -c fix/<demo-blocker>
 ```
 
 After implementation:
@@ -176,7 +205,7 @@ After implementation:
 ```powershell
 .\gradlew.bat test
 .\gradlew.bat assembleDebug
-git push -u origin feature/<feature-name>
+git push -u origin fix/<demo-blocker>
 ```
 
-Open a narrow PR into `feature/final-integration`, let CI pass, run the affected device path, then merge the feature into the integration candidate. PR #7 will automatically accumulate the integrated feature for the eventual final merge to `main`.
+Use this only for a reproduced crash or demo-blocking defect. Open a narrow PR into `feature/final-integration`, let CI pass, and retest the affected path. PR #7 will automatically accumulate the blocker fix for the eventual final merge to `main`.
