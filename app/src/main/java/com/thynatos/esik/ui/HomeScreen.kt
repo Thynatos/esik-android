@@ -3,19 +3,15 @@ package com.thynatos.esik.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,11 +20,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.thynatos.esik.data.UserProfile
+import com.thynatos.esik.ui.components.DeveloperToolsCard
+import com.thynatos.esik.ui.components.EsikCard
+import com.thynatos.esik.ui.components.EsikScreen
+import com.thynatos.esik.ui.components.EsikTopBar
+import com.thynatos.esik.ui.components.PermissionBanner
+import com.thynatos.esik.ui.components.PrimaryActionButton
+import com.thynatos.esik.ui.components.SecondaryActionButton
+import com.thynatos.esik.ui.components.SectionTitle
+import com.thynatos.esik.ui.components.StatItem
+import com.thynatos.esik.ui.components.StatusPill
+import com.thynatos.esik.ui.theme.EsikSpacing
 
 @Composable
 fun HomeScreen(
@@ -58,120 +66,216 @@ fun HomeScreen(
     }
     val permissionsReady = hasUsageAccess && canDrawOverlays
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Text("Merhaba, ${profile.name}", style = MaterialTheme.typography.headlineMedium)
-        Text("${profile.targetAppLabel} için bugünkü durum")
+    EsikScreen {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = EsikSpacing.xLarge, vertical = EsikSpacing.xxLarge),
+            verticalArrangement = Arrangement.spacedBy(EsikSpacing.xLarge),
+        ) {
+            EsikTopBar(
+                title = "Merhaba, ${profile.name}",
+                subtitle = "Bugünkü kullanımını kendi hedefinle birlikte gör.",
+                trailing = {
+                    StatusPill(
+                        label = if (monitoringStarted) "Takip açık" else "Takip kapalı",
+                        active = monitoringStarted,
+                    )
+                },
+            )
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("$usageMinutes / ${profile.dailyLimitMinutes} dakika")
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth(),
+            EsikCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = profile.targetAppLabel,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = "Bugünkü kullanım",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = onRefresh) {
+                            Text("Yenile")
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(EsikSpacing.small),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        Text(
+                            text = usageMinutes.toString(),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "dakika",
+                            modifier = Modifier.padding(bottom = 5.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "0 dk",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "Kendi hedefin ${profile.dailyLimitMinutes} dk",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
+            }
+
+            EsikCard {
+                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(EsikSpacing.large),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall),
+                        ) {
+                            Text("Günün yansıması", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "Yerel kayıtlarına ve bugünkü sayılara birlikte bak.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        StatItem(value = recordCount.toString(), label = "cihazdaki kayıt")
+                    }
+                    PrimaryActionButton(text = "Günlük raporu aç", onClick = onOpenReport)
+                }
+            }
+
+            if (!hasUsageAccess || !canDrawOverlays) {
+                SectionTitle(
+                    title = "Kurulumu tamamla",
+                    supportingText = "Takibin çalışması için eksik izinleri aç.",
                 )
-                Text("Toplam kayıt: $recordCount", style = MaterialTheme.typography.bodySmall)
             }
-        }
-
-        OutlinedTextField(
-            value = limitText,
-            onValueChange = { limitText = it.filter(Char::isDigit).take(4) },
-            label = { Text("Limiti değiştir — dakika") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(
-            onClick = { limitText.toIntOrNull()?.takeIf { it > 0 }?.let(onUpdateLimit) },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Limiti kaydet")
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedButton(onClick = onRefresh, modifier = Modifier.weight(1f)) {
-                Text("Yenile")
+            if (!hasUsageAccess) {
+                PermissionBanner(
+                    title = "Kullanım erişimi kapalı",
+                    explanation = "Eşik, seçtiğin uygulamanın bugünkü süresini okuyabilsin.",
+                    actionLabel = "İzin ver",
+                    onAction = onOpenUsagePermission,
+                )
             }
-            Button(onClick = onOpenReport, modifier = Modifier.weight(1f)) {
-                Text("Rapor")
+            if (!canDrawOverlays) {
+                PermissionBanner(
+                    title = "Ekran üstü kart izni kapalı",
+                    explanation = "Kendi hedefine ulaştığında destek kartı görünebilsin.",
+                    actionLabel = "İzin ver",
+                    onAction = onOpenOverlayPermission,
+                )
             }
-        }
 
-        HorizontalDivider()
-        Text("Takip", style = MaterialTheme.typography.titleMedium)
-        PermissionAction(
-            label = "Kullanım erişimi",
-            granted = hasUsageAccess,
-            onOpen = onOpenUsagePermission,
-        )
-        PermissionAction(
-            label = "Üste çizme izni",
-            granted = canDrawOverlays,
-            onOpen = onOpenOverlayPermission,
-        )
-        Button(
-            onClick = if (monitoringStarted) onStopMonitoring else onStartMonitoring,
-            enabled = monitoringStarted || permissionsReady,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (monitoringStarted) "Takibi durdur" else "Takibi başlat")
-        }
-        if (!permissionsReady) {
-            Text(
-                "Takibi başlatmak için iki özel izni de aç.",
-                style = MaterialTheme.typography.bodySmall,
+            SectionTitle(
+                title = "Takip ayarları",
+                supportingText = "Hedefini ve izlemeyi buradan yönet.",
             )
-        }
-        OutlinedButton(onClick = onOpenTargetApp, modifier = Modifier.fillMaxWidth()) {
-            Text("${profile.targetAppLabel} uygulamasını aç")
-        }
+            EsikCard {
+                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Kullanım takibi", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                if (monitoringStarted) "Arka planda çalışıyor" else "Şu anda duraklatıldı",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        StatusPill(
+                            label = if (monitoringStarted) "Açık" else "Kapalı",
+                            active = monitoringStarted,
+                        )
+                    }
+                    if (monitoringStarted) {
+                        SecondaryActionButton("Takibi durdur", onClick = onStopMonitoring)
+                    } else {
+                        PrimaryActionButton(
+                            text = "Takibi başlat",
+                            onClick = onStartMonitoring,
+                            enabled = permissionsReady,
+                        )
+                    }
+                    if (!permissionsReady && !monitoringStarted) {
+                        Text(
+                            "Takibi başlatmak için iki izni de aç.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
-        HorizontalDivider()
-        Text("Hackathon testleri", style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(onClick = onOpenIntervention, modifier = Modifier.fillMaxWidth()) {
-            Text("Kart ekranını test et")
-        }
-        OutlinedButton(onClick = onLoadDemoData, modifier = Modifier.fillMaxWidth()) {
-            Text("4 günlük demo verisi yükle")
-        }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
-        Spacer(Modifier.height(6.dp))
-        TextButton(onClick = onClearData, modifier = Modifier.fillMaxWidth()) {
-            Text("Tüm verileri sil")
-        }
-    }
-}
+                    Text("Günlük hedef", style = MaterialTheme.typography.titleMedium)
+                    OutlinedTextField(
+                        value = limitText,
+                        onValueChange = { limitText = it.filter(Char::isDigit).take(4) },
+                        label = { Text("Dakika") },
+                        supportingText = { Text("Bu sayıyı yalnızca sen belirlersin.") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    SecondaryActionButton(
+                        text = "Hedefi güncelle",
+                        onClick = {
+                            limitText.toIntOrNull()?.takeIf { it > 0 }?.let(onUpdateLimit)
+                        },
+                        enabled = limitText.toIntOrNull()?.let { it > 0 } == true,
+                    )
 
-@Composable
-private fun PermissionAction(
-    label: String,
-    granted: Boolean,
-    onOpen: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label)
-            Text(
-                if (granted) "Açık" else "Kapalı",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        OutlinedButton(onClick = onOpen) {
-            Text(if (granted) "Ayarlar" else "İzin ver")
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+
+                    Text("Seçili uygulama", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        profile.targetAppLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SecondaryActionButton(
+                        text = "${profile.targetAppLabel} uygulamasını aç",
+                        onClick = onOpenTargetApp,
+                    )
+                }
+            }
+
+            DeveloperToolsCard {
+                SecondaryActionButton("Kart ekranını test et", onClick = onOpenIntervention)
+                SecondaryActionButton("4 günlük demo verisi yükle", onClick = onLoadDemoData)
+                TextButton(onClick = onClearData, modifier = Modifier.fillMaxWidth()) {
+                    Text("Tüm verileri sil", color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
     }
 }
