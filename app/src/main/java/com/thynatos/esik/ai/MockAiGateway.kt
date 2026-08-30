@@ -28,7 +28,7 @@ class MockAiGateway : AiGateway {
         }.distinct().take(3)
 
         val contexts = buildList {
-            if (combined.containsAny("yorgun", "yorul", "bitkin", "enerjim yok", "tired")) {
+            if (combined.containsAny("yorgun", "yorul", "bitkin", "enerjim yok", "tired", "exhausted")) {
                 add("yorgunluk")
             }
             if (
@@ -39,24 +39,29 @@ class MockAiGateway : AiGateway {
                     "başlamak yerine",
                     "oyalan",
                     "odaklan",
+                    "avoiding",
                 )
             ) {
                 add("erteleme")
             }
             if (combined.containsAny("sıkıl", "bored", "boş kald")) add("sıkılma")
             if (combined.containsAny("rahatla", "dinlen", "kafa dağıt", "relax")) add("dinlenme")
-            if (combined.containsAny("uyku", "gece", "uyuyam")) add("gece kullanımı")
+            if (combined.containsAny("uyku", "gece", "uyuyam", "sleep", "bedtime")) {
+                add("gece kullanımı")
+            }
             if (isEmpty()) add("alışkanlıkla açma")
         }.distinct().take(4)
 
-        val preferredActivities = buildList {
-            addAll(intake.hobbies.map(String::trim).filter(String::isNotEmpty))
-            intake.improvementArea.trim().takeIf(String::isNotEmpty)?.let(::add)
-            if (isEmpty()) addAll(listOf("kısa yürüyüş", "müzik", "iki dakikalık mola"))
-        }.distinct().take(5)
+        val preferredActivities = intake.hobbies
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+            .take(5)
 
         val lowEnergyActivities = buildList {
-            preferredActivities.firstOrNull()?.let { add("$it için iki dakikalık başlangıç") }
+            preferredActivities.firstOrNull()?.let { hobby ->
+                add(lowEnergyVersion(hobby))
+            }
             add("bir bardak su içip ekrandan uzaklaşmak")
             add("bir şarkı boyunca telefonu bırakmak")
         }.distinct().take(3)
@@ -81,43 +86,58 @@ class MockAiGateway : AiGateway {
         currentUsageMinutes: Int,
         input: InterventionInput,
     ): AiCard {
-        val state = input.stateId.ifBlank { inferState(input.text) }
-        val preferred = sequenceOf(
-            profile.personalization.preferredActivities.firstOrNull(),
-            profile.hobbies.firstOrNull(),
-            profile.improvementArea.takeIf(String::isNotBlank),
-        ).filterNotNull().firstOrNull { value ->
-            SafetyLanguageValidator.isDisplaySafe(value)
-        }
-        val safeGoal = profile.personalization.goals.firstOrNull { value ->
-            SafetyLanguageValidator.isDisplaySafe(value)
+        val policy = InterventionContextBuilder.build(profile, input)
+
+        val question = when (policy.objective) {
+            InterventionObjective.PAUSE_AND_RECOVER ->
+                "Şu anda kısa bir dinlenme mi, yoksa otomatik bir kaydırma mı arıyorsun?"
+            InterventionObjective.MICRO_START ->
+                "Ertelediğin şeyin yalnızca ilk iki dakikasını yapmak daha ulaşılabilir olabilir mi?"
+            InterventionObjective.MAKE_BREAK_INTENTIONAL ->
+                "Bu molayı ne kadar sürdürmek istediğini baştan seçmek işine yarar mı?"
+            InterventionObjective.CHANGE_STIMULUS ->
+                "Can sıkıntısını değiştirmek için küçük ve belirli bir seçenek denemek ister misin?"
+            InterventionObjective.USE_WAIT_BRIEFLY ->
+                "Beklerken ekran dışında kısa bir seçenek denemek ister misin?"
+            InterventionObjective.WIND_DOWN ->
+                "Uyumadan önce ekrandan kısa bir süre uzaklaşmak sana iyi gelebilir mi?"
+            InterventionObjective.CLARIFY_INTENTION ->
+                "Bu açılışın bilinçli bir seçim mi, yoksa alışkanlık mı olduğunu ayırmak ister misin?"
+            InterventionObjective.CLARIFY_NEED ->
+                "Şu anda gerçekten neye ihtiyaç duyduğunu bir cümleyle ayırmak yardımcı olabilir mi?"
         }
 
-        val question = when (state) {
-            "tired" -> "Şu anda kısa bir dinlenme mi, yoksa otomatik bir kaydırma mı arıyorsun?"
-            "procrastinating" -> "Ertelediğin şeyin yalnızca ilk iki dakikasını yapmak daha ulaşılabilir olabilir mi?"
-            "relaxing" -> "Bu molayı ne kadar sürdürmek istediğini baştan seçmek işine yarar mı?"
-            "bored" -> "Can sıkıntısını değiştirmek için daha küçük ve belirli bir şey seçmek ister misin?"
-            "waiting" -> "Beklerken ekran dışında kısa bir seçenek denemek ister misin?"
-            "habit" -> "Bu açılış bilinçli bir seçimden ziyade alışkanlığa benziyor olabilir mi?"
-            else -> "Şu anda gerçekten neye ihtiyaç duyduğunu bir cümleyle ayırmak yardımcı olabilir mi?"
-        }
+        val alternative = when (policy.objective) {
+            InterventionObjective.PAUSE_AND_RECOVER,
+            InterventionObjective.WIND_DOWN,
+            -> lowEnergyAlternative(policy)
 
-        val alternative = when (state) {
-            "tired" -> profile.personalization.lowEnergyActivities
-                .firstOrNull { value -> SafetyLanguageValidator.isDisplaySafe(value) }
-                ?.let { "$it için yalnızca iki dakika ayırabilirsin." }
-                ?: "Bir şarkı boyunca telefonu bırakıp gözlerini dinlendirebilirsin."
-            "procrastinating" -> safeGoal
-                ?.let { "$it için yalnızca ilk iki dakikalık adımı başlatabilirsin." }
-                ?: "Ertelediğin işin yalnızca ilk iki dakikasını yapabilirsin."
-            "relaxing" -> "Bunu bilinçli bir mola olarak seçiyorsan 10 dakikalık bir zamanlayıcı kurup sonra yeniden karar verebilirsin."
-            "waiting" -> preferred
-                ?.let { "Beklerken $it için iki dakikalık küçük bir adım deneyebilirsin." }
+            InterventionObjective.MICRO_START -> policy.anchors.goals.firstOrNull()
+                ?.let { goal ->
+                    "$goal için yalnızca ilk iki dakikalık adımı başlatmayı deneyebilirsin."
+                }
+                ?: "Ertelediğin işin yalnızca ilk iki dakikasını yapmayı deneyebilirsin."
+
+            InterventionObjective.MAKE_BREAK_INTENTIONAL ->
+                "Bunu bilinçli bir mola olarak seçiyorsan 10 dakikalık bir zamanlayıcı kurup sonra yeniden karar verebilirsin."
+
+            InterventionObjective.CHANGE_STIMULUS -> policy.anchors.activities.firstOrNull()
+                ?.let { activity ->
+                    "$activity için iki dakikalık küçük bir başlangıç yapmayı deneyebilirsin."
+                }
+                ?: "İki dakika boyunca bulunduğun ortamı değiştirip sonra yeniden karar verebilirsin."
+
+            InterventionObjective.USE_WAIT_BRIEFLY -> policy.anchors.activities.firstOrNull()
+                ?.let { activity ->
+                    "Beklerken $activity için iki dakikalık küçük bir adım deneyebilirsin."
+                }
                 ?: "Beklerken iki dakika boyunca bulunduğun ortamı gözlemleyebilirsin."
-            else -> preferred
-                ?.let { "$it için iki dakikalık küçük bir başlangıç yapabilirsin." }
-                ?: "İki dakika boyunca telefonu bırakıp kısa bir mola verebilirsin."
+
+            InterventionObjective.CLARIFY_INTENTION ->
+                "Telefonu iki dakika masaya bırakıp ne için açtığını netleştirdikten sonra yeniden karar verebilirsin."
+
+            InterventionObjective.CLARIFY_NEED ->
+                "İki dakika boyunca telefonu bırakıp kısa bir ekran molası vermeyi deneyebilirsin."
         }
 
         return AiCard(question = question, alternative = alternative)
@@ -143,23 +163,36 @@ class MockAiGateway : AiGateway {
             )
         }
 
-        val commonState = records
-            .mapNotNull { it.stateLabel.takeIf(String::isNotBlank) }
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
+        val evidence = DailyReportEvidenceBuilder.build(records)
+        val selectedStateId = evidence.higherContinueStateId ?: evidence.dominantStateId
+        val selectedState = evidence.states.firstOrNull { it.stateId == selectedStateId }
+        val observation = selectedState?.stateLabel
+            ?.takeIf(String::isNotBlank)
             ?.takeIf { SafetyLanguageValidator.isDisplaySafe(it) }
+            ?.let { label ->
+                "“$label” dediğin anlarda verdiğin kararlar arasında bir örüntü olabilir mi?"
+            }
+            ?: "Bugünkü farklı Eşik anlarından hangisi daha bilinçli bir seçim gibi hissettirdi?"
 
-        val observation = commonState?.let {
-            "“$it” seçtiğin anlarda verdiğin kararlar arasında bir örüntü olabilir mi?"
-        } ?: "Akşam saatlerindeki girişler yorgunluk veya alışkanlıkla bağlantılı olabilir mi?"
-
-        val reportGoal = profile.personalization.goals.firstOrNull()
-            ?.takeIf { SafetyLanguageValidator.isDisplaySafe(it) }
-        val microStep = reportGoal?.let {
-            "Yarın $it için telefonu açmadan önce iki dakikalık tek bir başlangıç yap."
-        } ?: "Yarın ilk müdahalede telefonu iki dakika uzağa bırakıp sonra yeniden karar ver."
+        val safeGoal = profile.personalization.goals.firstOrNull {
+            SafetyLanguageValidator.isDisplaySafe(it)
+        }
+        val microStep = when (selectedStateId) {
+            "procrastinating" -> safeGoal
+                ?.let { goal ->
+                    "Yarın ilk erteleme anında $goal için yalnızca iki dakika başla."
+                }
+                ?: "Yarın ilk erteleme anında işi iki dakika açıp sonra yeniden karar ver."
+            "tired", "late_night" ->
+                "Yarın ilk yorgunluk anında telefonu iki dakika uzağa bırakıp dinlenmeyi dene."
+            "relaxing" ->
+                "Yarın ilk molada beş dakikalık bir zamanlayıcı kurup sonra yeniden karar ver."
+            else -> safeGoal
+                ?.let { goal ->
+                    "Yarın $goal için telefonu açmadan önce iki dakikalık tek bir başlangıç yap."
+                }
+                ?: "Yarın ilk müdahalede telefonu iki dakika uzağa bırakıp sonra yeniden karar ver."
+        }
 
         return DailyReport(
             totalUsageMinutes = currentUsageMinutes,
@@ -172,16 +205,28 @@ class MockAiGateway : AiGateway {
         )
     }
 
-    private fun inferState(text: String): String {
-        val normalized = text.lowercase()
+    private fun lowEnergyAlternative(policy: InterventionPolicy): String {
+        val anchor = policy.anchors.lowEnergyActivities.firstOrNull()
+            ?: policy.anchors.activities.firstOrNull()
         return when {
-            normalized.containsAny("yorgun", "yorul", "bitkin", "tired") -> "tired"
-            normalized.containsAny("ertel", "başlayam", "başlamak yerine", "oyalan", "procrast") -> "procrastinating"
-            normalized.containsAny("dinlen", "rahatla", "kafa dağıt") -> "relaxing"
-            normalized.containsAny("sıkıl", "bored") -> "bored"
-            normalized.containsAny("bekli", "waiting") -> "waiting"
-            else -> "habit"
+            anchor == null ->
+                "Bir şarkı boyunca telefonu bırakıp gözlerini dinlendirmeyi deneyebilirsin."
+            anchor.containsAny("müzik", "şarkı", "music", "song") ->
+                "Bir şarkı boyunca telefonu bırakıp yalnızca müzik dinlemeyi deneyebilirsin."
+            anchor.containsAny("su", "water") ->
+                "Bir bardak su içip iki dakika ekrandan uzaklaşmayı deneyebilirsin."
+            anchor.containsAny("yürüyüş", "walk") ->
+                "İki dakikalık yavaş bir yürüyüş yapıp sonra yeniden karar verebilirsin."
+            else ->
+                "$anchor için iki dakika ayırmayı deneyebilirsin."
         }
+    }
+
+    private fun lowEnergyVersion(hobby: String): String = when {
+        hobby.containsAny("müzik", "şarkı", "music", "song") -> "bir şarkı dinlemek"
+        hobby.containsAny("kitap", "oku", "book", "read") -> "iki sayfa okumak"
+        hobby.containsAny("gitar", "guitar") -> "iki dakika gitar çalmak"
+        else -> "$hobby için iki dakika ayırmak"
     }
 
     private fun stateForContext(context: String): QuickStateOption? = when (context) {
@@ -195,7 +240,7 @@ class MockAiGateway : AiGateway {
     }
 
     private fun String.containsAny(vararg needles: String): Boolean =
-        needles.any(::contains)
+        needles.any { needle -> contains(needle, ignoreCase = true) }
 
     private companion object {
         const val REPORT_MINIMUM_RECORDS = 7
