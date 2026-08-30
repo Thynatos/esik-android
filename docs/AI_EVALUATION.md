@@ -175,3 +175,7 @@ For optional non-AI features, these prompt/model settings should stay unchanged 
 If future work changes prompts, policy mapping, validation, structured-output contracts, model IDs, or retry/fallback behavior, rerun the relevant golden scenarios plus offline fallback and the daily report before merging that AI change into `feature/final-integration`.
 
 No chain-of-thought or hidden reasoning is requested or claimed. Eşik uses structured prompting, compact contrastive examples, locally compiled policy constraints, and application-side validation.
+
+## Personalization v3 implementation pass
+
+The v3 implementation adds grounded profile summaries and focus targets, canonical low-motivation and overwhelmed states, bounded recent-intervention context, richer cards, Turkish style checks, and deterministic near-duplicate rejection. Direct Gemini checks, human scoring, emulator/phone smoke tests, and model comparison for these changes are intentionally deferred until after the implementation gates pass.

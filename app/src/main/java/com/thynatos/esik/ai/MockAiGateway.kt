@@ -72,7 +72,18 @@ class MockAiGateway : AiGateway {
             }
         }.distinct().take(4)
 
-        val preferredActivities = intake.hobbies
+        val narrativeActivities = listOf(
+            "müzik",
+            "gitar",
+            "koşu",
+            "spor",
+            "kitap",
+            "podcast",
+            "yürüyüş",
+            "resim",
+            "film",
+        ).filter { activity -> combined.contains(activity) }
+        val preferredActivities = (intake.hobbies + narrativeActivities)
             .map(String::trim)
             .filter(String::isNotEmpty)
             .distinct()
@@ -86,7 +97,9 @@ class MockAiGateway : AiGateway {
                 add(lowEnergyVersion(hobby))
             }
             add("bir bardak su içip ekrandan uzaklaşmak")
-            add("bir şarkı boyunca telefonu bırakmak")
+            if (preferredActivities.any { it.containsAny("müzik", "şarkı", "music", "song") }) {
+                add("bir şarkı boyunca telefonu bırakmak")
+            }
         }.distinct().take(3)
 
         val personalizedStates = contexts.mapNotNull(::stateForContext)

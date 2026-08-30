@@ -75,6 +75,7 @@ fun OnboardingScreen(
     var improvementArea by rememberSaveable { mutableStateOf("") }
     var reason by rememberSaveable { mutableStateOf("") }
     var generatedProfile by remember { mutableStateOf<PersonalizationProfile?>(null) }
+    var profileConfirmed by rememberSaveable { mutableStateOf(false) }
     var isGeneratingProfile by remember { mutableStateOf(false) }
     var profileMessage by remember { mutableStateOf<String?>(null) }
     var showOptionalDetails by rememberSaveable { mutableStateOf(false) }
@@ -102,6 +103,7 @@ fun OnboardingScreen(
                     .filter(String::isNotBlank)
                     .joinToString(" ")
                 generatedProfile = null
+                profileConfirmed = false
                 profileMessage = "Sesli anlatım metne eklendi. İstersen düzenleyebilirsin."
             }
         }
@@ -127,6 +129,7 @@ fun OnboardingScreen(
     fun generateProfile(onReady: (PersonalizationProfile) -> Unit = {}) {
         if (!valid || isGeneratingProfile) return
         isGeneratingProfile = true
+        profileConfirmed = false
         profileMessage = null
         val currentIntake = intake()
         val crisisSignal = CrisisFilter.check(
@@ -148,6 +151,7 @@ fun OnboardingScreen(
                 }
             }
             generatedProfile = generated
+            profileConfirmed = false
             isGeneratingProfile = false
             profileMessage = if (crisisSignal) {
                 "Bunu tek başına taşımak zorunda değilsin. Yakınındaki acil yardım hizmetine, güvendiğin bir kişiye veya profesyonel desteğe şimdi ulaş. Bu metin AI servisine gönderilmedi."
@@ -192,6 +196,7 @@ fun OnboardingScreen(
                 onValueChange = {
                     name = it
                     generatedProfile = null
+                    profileConfirmed = false
                 },
                 label = { Text("İsim · gerekli") },
                 isError = attemptedSubmit && name.isBlank(),
@@ -235,6 +240,7 @@ fun OnboardingScreen(
                         onValueChange = {
                             biography = it
                             generatedProfile = null
+                            profileConfirmed = false
                             profileMessage = null
                         },
                         label = { Text("Yazarak anlat · gerekli") },
@@ -287,6 +293,7 @@ fun OnboardingScreen(
                             onValueChange = {
                                 department = it
                                 generatedProfile = null
+                                profileConfirmed = false
                             },
                             label = { Text("Bölüm / alan") },
                             modifier = Modifier.fillMaxWidth(),
@@ -296,6 +303,7 @@ fun OnboardingScreen(
                             onValueChange = {
                                 hobbiesText = it
                                 generatedProfile = null
+                                profileConfirmed = false
                             },
                             label = { Text("Sevdiğin aktiviteler") },
                             supportingText = { Text("Örn. gitar, koşu, kitap, podcast") },
@@ -306,6 +314,7 @@ fun OnboardingScreen(
                             onValueChange = {
                                 improvementArea = it
                                 generatedProfile = null
+                                profileConfirmed = false
                             },
                             label = { Text("Geliştirmek istediğin alan") },
                             modifier = Modifier.fillMaxWidth(),
@@ -315,6 +324,7 @@ fun OnboardingScreen(
                             onValueChange = {
                                 reason = it
                                 generatedProfile = null
+                                profileConfirmed = false
                             },
                             label = { Text("Kendi hedefin") },
                             supportingText = { Text("Örn. gece daha rahat uyumak istiyorum") },
@@ -353,14 +363,33 @@ fun OnboardingScreen(
 
             generatedProfile?.let { personalization ->
                 SectionTitle(
-                    title = "Profil özeti",
+                    title = if (profileConfirmed) "Profilin hazır" else "Seni böyle anladım",
                     supportingText = "Kendi anlattıklarından hazırlanan bir başlangıç noktası.",
                 )
                 EsikCard {
                     Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
-                        ProfileTags("Hedeflerin", personalization.goals)
-                        ProfileTags("Karşılaşabileceğin durumlar", personalization.recurringContexts)
-                        ProfileTags("Sana uygun aktiviteler", personalization.preferredActivities)
+                        if (personalization.profileSummary.isNotBlank()) {
+                            Text(
+                                personalization.profileSummary,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                        ProfileTags(
+                            label = "Değiştirmek istediğin",
+                            values = (personalization.focusTargets.ifEmpty { personalization.goals })
+                                .take(4),
+                        )
+                        ProfileTags(
+                            label = "Sık karşılaştığın anlar",
+                            values = personalization.recurringContexts,
+                        )
+                        ProfileTags(
+                            label = "Sana uygun alternatifler",
+                            values = (
+                                personalization.preferredActivities +
+                                    personalization.lowEnergyActivities
+                                ).distinct().take(5),
+                        )
                         ProfileTags(
                             label = "Hızlı seçeneklerin",
                             values = personalization.quickStatesOrDefault().take(3).map { option ->
@@ -370,10 +399,32 @@ fun OnboardingScreen(
                             },
                         )
                         Text(
-                            "Bu bir tanı değil; yalnızca düzenlenebilir bir kişiselleştirme özetidir.",
+                            "Bu profil yalnızca anlattıklarından oluşturuldu. Eşik önerilerini buna göre kişiselleştirecek.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (!profileConfirmed) {
+                            PrimaryActionButton(
+                                text = "Doğru görünüyor",
+                                onClick = { profileConfirmed = true },
+                            )
+                        } else {
+                            Text(
+                                "Profil onaylandı. İstersen anlatımını aşağıdaki bilgileri düzenleyerek değiştirebilirsin.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                generatedProfile = null
+                                profileConfirmed = false
+                                profileMessage = "Anlatımını düzenleyebilirsin."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Düzenle")
+                        }
                     }
                 }
             }

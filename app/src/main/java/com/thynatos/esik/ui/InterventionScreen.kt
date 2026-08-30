@@ -110,7 +110,12 @@ fun InterventionScreen(
                 MockAiGateway().generateCard(profile, usageMinutes, input, recentRecords)
             }
             generatedCard = if (
-                SafetyLanguageValidator.isDisplaySafe(result.question, result.alternative)
+                SafetyLanguageValidator.isDisplaySafe(
+                    result.reflection,
+                    result.question,
+                    result.activityTitle,
+                    result.alternative,
+                )
             ) {
                 result
             } else {
@@ -319,11 +324,13 @@ fun InterventionScreen(
                     )
                     EsikCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
                         Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
-                            Text(
-                                "DÜŞÜNMEK İÇİN",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            if (card.reflection.isNotBlank()) {
+                                Text(
+                                    card.reflection,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Text(
                                 card.question,
                                 style = MaterialTheme.typography.headlineSmall,
@@ -338,11 +345,26 @@ fun InterventionScreen(
                                     modifier = Modifier.padding(EsikSpacing.large),
                                     verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall),
                                 ) {
-                                    Text(
-                                        "Küçük adım",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            card.activityTitle.ifBlank { "Küçük adım" },
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        if (card.durationMinutes > 0) {
+                                            Text(
+                                                "${card.durationMinutes} dk",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
                                     Text(card.alternative, style = MaterialTheme.typography.bodyLarge)
                                 }
                             }

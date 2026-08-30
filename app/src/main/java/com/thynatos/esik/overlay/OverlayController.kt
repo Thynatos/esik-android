@@ -213,6 +213,13 @@ class OverlayController(
             resultContainer.removeAllViews()
             resultContainer.background = roundedBackground(accentContainer, 20f)
             resultContainer.setPadding(18.dp, 18.dp, 18.dp, 18.dp)
+            if (cardResult.reflection.isNotBlank()) {
+                resultContainer.addView(TextView(appContext).apply {
+                    text = cardResult.reflection
+                    textSize = 14f
+                    setTextColor(mutedInk)
+                }, matchWrap(bottom = 8.dp))
+            }
             resultContainer.addView(TextView(appContext).apply {
                 text = "DÜŞÜNMEK İÇİN"
                 textSize = 11f
@@ -226,12 +233,28 @@ class OverlayController(
                 setTextColor(ink)
                 setTypeface(typeface, Typeface.BOLD)
             }, matchWrap(bottom = 14.dp))
-            resultContainer.addView(TextView(appContext).apply {
-                text = "Küçük adım"
-                textSize = 13f
+            val activityHeader = LinearLayout(appContext).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            activityHeader.addView(TextView(appContext).apply {
+                text = cardResult.activityTitle.ifBlank { "Küçük adım" }
+                textSize = 15f
                 setTextColor(accent)
                 setTypeface(typeface, Typeface.BOLD)
-            }, matchWrap(bottom = 4.dp))
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            if (cardResult.durationMinutes > 0) {
+                activityHeader.addView(TextView(appContext).apply {
+                    text = "${cardResult.durationMinutes} dk"
+                    textSize = 13f
+                    setTextColor(accent)
+                    setTypeface(typeface, Typeface.BOLD)
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ))
+            }
+            resultContainer.addView(activityHeader, matchWrap(bottom = 4.dp))
             resultContainer.addView(TextView(appContext).apply {
                 text = cardResult.alternative
                 textSize = 17f
@@ -286,7 +309,9 @@ class OverlayController(
                 }
                 val safeResult = if (
                     SafetyLanguageValidator.isDisplaySafe(
+                        generated.reflection,
                         generated.question,
+                        generated.activityTitle,
                         generated.alternative,
                     )
                 ) {

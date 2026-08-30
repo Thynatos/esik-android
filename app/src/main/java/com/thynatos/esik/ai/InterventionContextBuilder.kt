@@ -2,6 +2,7 @@ package com.thynatos.esik.ai
 
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionInputMethod
+import com.thynatos.esik.data.QuickStateTaxonomy
 import com.thynatos.esik.data.UserProfile
 
 object InterventionContextBuilder {
@@ -196,29 +197,21 @@ object InterventionContextBuilder {
     }
 
     private fun canonicalState(rawState: String): String? {
-        val normalized = rawState.normalizeForPolicyMatching()
-        return when (normalized) {
-            "tired", "low_energy", "fatigue" -> STATE_TIRED
-            "procrastinating", "procrastination", "avoidance" -> STATE_PROCRASTINATING
-            "relaxing", "intentional_rest", "rest" -> STATE_RELAXING
-            "bored", "boredom" -> STATE_BORED
-            "waiting" -> STATE_WAITING
-            "habit", "automatic" -> STATE_HABIT
-            "late_night", "night" -> STATE_LATE_NIGHT
-            "low_motivation", "unmotivated" -> STATE_LOW_MOTIVATION
-            "overwhelmed" -> STATE_OVERWHELMED
-            "other" -> STATE_OTHER
-            else -> null
-        }
+        return QuickStateTaxonomy.canonicalize(rawState)
     }
 
     private fun UserProfile.toAnchors(lowEnergy: Boolean): PersonalizationAnchors {
-        val goals = (
+        val groundedGoals = (
             personalization.focusTargets +
                 personalization.goals +
                 listOf(improvementArea, reason)
             )
             .safeGroundingValues(maxItems = 4)
+        val goals = if (lowEnergy) {
+            groundedGoals.filterNot(::looksHighEffort)
+        } else {
+            groundedGoals
+        }
 
         val generalActivities = (
             personalization.preferredActivities + hobbies
@@ -370,6 +363,7 @@ object InterventionContextBuilder {
     )
     private val OVERWHELMED_CUES = setOf(
         "cok fazla sey var",
+        "cok fazla is var",
         "nereden baslayacagimi bilmiyorum",
         "nereden baslayacagim",
         "bunaldim",

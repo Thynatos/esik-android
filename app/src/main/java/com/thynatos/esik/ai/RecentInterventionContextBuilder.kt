@@ -1,6 +1,7 @@
 package com.thynatos.esik.ai
 
 import com.thynatos.esik.data.InterventionRecord
+import com.thynatos.esik.data.QuickStateTaxonomy
 import com.thynatos.esik.data.UserChoice
 
 internal data class RecentInterventionContext(
@@ -17,7 +18,7 @@ internal object RecentInterventionContextBuilder {
         .takeLast(maxItems.coerceIn(0, MAX_ITEMS))
         .map { record ->
             RecentInterventionContext(
-                state = record.stateId.trim().ifBlank { "other" },
+                state = QuickStateTaxonomy.canonicalize(record.stateId) ?: "other",
                 choice = when (record.choice) {
                     UserChoice.CONTINUE -> "continue"
                     UserChoice.STOPPED -> "stopped"

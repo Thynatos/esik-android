@@ -83,7 +83,7 @@ internal object ProfileGroundingSanitizer {
             ).joinToString(" ")
 
         val profileSummary = generated.profileSummary
-            .takeIf { isSafeGroundedSummary(it, groundedFieldText) }
+            .takeIf { isSafeGroundedSummary(it, groundedFieldText, allEvidence) }
             ?: buildLocalSummary(focusTargets, goals, contexts, activities)
 
         return generated.copy(
@@ -138,18 +138,27 @@ internal object ProfileGroundingSanitizer {
         }.take(MAX_SUMMARY_CHARS)
     }
 
-    private fun isSafeGroundedSummary(summary: String, groundedFieldText: String): Boolean {
+    private fun isSafeGroundedSummary(
+        summary: String,
+        groundedFieldText: String,
+        allEvidence: String,
+    ): Boolean {
         val trimmed = summary.trim()
         if (trimmed.length !in MIN_SUMMARY_CHARS..MAX_SUMMARY_CHARS) return false
         if (!SafetyLanguageValidator.isDisplaySafe(trimmed)) return false
         val normalized = trimmed.normalizeForGrounding()
         if (UNSAFE_SUMMARY_CUES.any(normalized::contains)) return false
-        if (groundedFieldText.isBlank()) return false
         val summaryTokens = trimmed.meaningfulTokens()
-        val fieldTokens = groundedFieldText.meaningfulTokens()
-        if (summaryTokens.any(fieldTokens::contains)) return true
+        val evidenceTokens = groundedFieldText.meaningfulTokens()
+        if (NAMED_ENTITY_CUES.any { it in summaryTokens && it !in evidenceTokens }) return false
+        val normalizedEvidence = allEvidence.normalizeForGrounding()
+        if (PERSONAL_DETAIL_CUES.any { it in summaryTokens && !normalizedEvidence.contains(it) }) {
+            return false
+        }
+        if (groundedFieldText.isBlank()) return false
+        if (summaryTokens.any(evidenceTokens::contains)) return true
         return SEMANTIC_GROUPS.any { group ->
-            summaryTokens.any(group::contains) && fieldTokens.any(group::contains)
+            summaryTokens.any(group::contains) && evidenceTokens.any(group::contains)
         }
     }
 
@@ -255,5 +264,31 @@ internal object ProfileGroundingSanitizer {
         "dolayi",
         "sebebi",
         "cunku",
+    )
+    private val NAMED_ENTITY_CUES = setOf(
+        "discord",
+        "facebook",
+        "instagram",
+        "netflix",
+        "reddit",
+        "spotify",
+        "telegram",
+        "tiktok",
+        "twitter",
+        "youtube",
+    )
+    private val PERSONAL_DETAIL_CUES = setOf(
+        "ders",
+        "egzersiz",
+        "gitar",
+        "kitap",
+        "kosu",
+        "muzik",
+        "odev",
+        "podcast",
+        "sarki",
+        "spor",
+        "uyku",
+        "yuruyus",
     )
 }

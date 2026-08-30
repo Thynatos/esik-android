@@ -57,6 +57,20 @@ class MockAiGatewayTest {
     }
 
     @Test
+    fun sparseProfileFallbackDoesNotInventActivityPreferences() = runBlocking {
+        val result = gateway.generateProfile(
+            ProfileIntake(
+                name = "Ayşe",
+                biography = "Instagram'da daha az otomatik vakit geçirmek istiyorum.",
+            ),
+        )
+
+        assertTrue(result.preferredActivities.isEmpty())
+        assertTrue(result.lowEnergyActivities.none { it.contains("şarkı", ignoreCase = true) })
+        assertTrue(result.profileSummary.contains("Telefonu", ignoreCase = true))
+    }
+
+    @Test
     fun quickReplyCardUsesSelectedState() = runBlocking {
         val card = gateway.generateCard(
             profile = profile,

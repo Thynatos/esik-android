@@ -179,6 +179,24 @@ class ProfileGroundingSanitizerTest {
     }
 
     @Test
+    fun unsupportedNamedEntityIsRejectedEvenWhenSummaryHasGroundedText() {
+        val result = ProfileGroundingSanitizer.sanitize(
+            intake = ProfileIntake(
+                name = "Ayşe",
+                biography = "Ders çalışmaya başlamakta zorlanıyorum.",
+            ),
+            generated = PersonalizationProfile(
+                goals = listOf("ders çalışmak"),
+                profileSummary = "Ders çalışmaya başlarken Netflix'e kaydığını anlattın.",
+            ),
+            fallback = fallback,
+        )
+
+        assertFalse(result.profileSummary.contains("Netflix"))
+        assertTrue(result.profileSummary.contains("ders", ignoreCase = true))
+    }
+
+    @Test
     fun sparseSummaryIsNotFabricatedWhenNothingIsGrounded() {
         val result = ProfileGroundingSanitizer.sanitize(
             intake = ProfileIntake(name = "Ayşe", biography = "Telefonumu azaltmak istiyorum."),

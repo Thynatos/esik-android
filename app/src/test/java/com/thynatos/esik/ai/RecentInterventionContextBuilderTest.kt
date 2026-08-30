@@ -14,8 +14,8 @@ class RecentInterventionContextBuilderTest {
         val context = RecentInterventionContextBuilder.build(records)
 
         assertEquals(6, context.size)
-        assertEquals("state-2", context.first().state)
-        assertEquals("state-7", context.last().state)
+        assertEquals("tired", context.first().state)
+        assertEquals("procrastinating", context.last().state)
     }
 
     @Test
@@ -60,7 +60,7 @@ class RecentInterventionContextBuilderTest {
         usageMinutes = 60,
         text = "custom text $index",
         choice = UserChoice.STOPPED,
-        stateId = "state-$index",
+        stateId = if (index % 2 == 0) "tired" else "procrastinating",
         stateLabel = "State $index",
         aiAlternative = "Alternative $index",
     )
