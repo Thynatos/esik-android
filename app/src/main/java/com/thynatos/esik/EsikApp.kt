@@ -1,8 +1,11 @@
 package com.thynatos.esik
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -67,6 +70,12 @@ fun EsikApp(
         mutableStateOf(if (profile == null) AppScreen.ONBOARDING else AppScreen.HOME)
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        permissionRefreshNonce++
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -87,6 +96,9 @@ fun EsikApp(
     }
     val canDrawOverlays = remember(context, permissionRefreshNonce) {
         PermissionNavigator.canDrawOverlays(context)
+    }
+    val hasNotificationPermission = remember(context, permissionRefreshNonce) {
+        PermissionNavigator.hasNotificationPermission(context)
     }
 
     LaunchedEffect(profile, permissionRefreshNonce) {
@@ -141,6 +153,7 @@ fun EsikApp(
                 monitoringStarted = monitoringStarted,
                 hasUsageAccess = hasUsageAccess,
                 canDrawOverlays = canDrawOverlays,
+                hasNotificationPermission = hasNotificationPermission,
                 reportLoading = reportLoading,
                 onRefresh = {
                     permissionRefreshNonce++
@@ -153,6 +166,11 @@ fun EsikApp(
                 onOpenOverlayPermission = {
                     PermissionNavigator.openOverlaySettings(context)
                 },
+                onRequestNotificationPermission = {
+                    if (!hasNotificationPermission) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                },
                 onUpdateLimit = { limit ->
                     val updated = activeProfile.copy(dailyLimitMinutes = limit)
                     repository.saveProfile(updated)
@@ -163,6 +181,9 @@ fun EsikApp(
                 onStartMonitoring = {
                     UsageMonitorService.start(context)
                     monitoringStarted = true
+                    if (!hasNotificationPermission) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
                 },
                 onStopMonitoring = {
                     UsageMonitorService.stop(context)
