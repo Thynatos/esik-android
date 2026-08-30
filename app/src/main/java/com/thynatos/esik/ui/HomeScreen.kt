@@ -11,7 +11,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -24,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.thynatos.esik.data.UserProfile
@@ -32,12 +30,14 @@ import com.thynatos.esik.ui.components.DeveloperToolsCard
 import com.thynatos.esik.ui.components.EsikCard
 import com.thynatos.esik.ui.components.EsikScreen
 import com.thynatos.esik.ui.components.EsikTopBar
+import com.thynatos.esik.ui.components.LimitPresetPicker
 import com.thynatos.esik.ui.components.PermissionBanner
 import com.thynatos.esik.ui.components.PrimaryActionButton
 import com.thynatos.esik.ui.components.SecondaryActionButton
 import com.thynatos.esik.ui.components.SectionTitle
 import com.thynatos.esik.ui.components.StatItem
 import com.thynatos.esik.ui.components.StatusPill
+import com.thynatos.esik.ui.components.UsageHeroCard
 import com.thynatos.esik.ui.theme.EsikSpacing
 
 @Composable
@@ -67,9 +67,6 @@ fun HomeScreen(
         mutableStateOf(profile.dailyLimitMinutes.toString())
     }
     var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
-    val progress = if (profile.dailyLimitMinutes <= 0) 0f else {
-        (usageMinutes.toFloat() / profile.dailyLimitMinutes.toFloat()).coerceIn(0f, 1f)
-    }
     val permissionsReady = hasUsageAccess && canDrawOverlays
     val compactLayout = LocalConfiguration.current.screenWidthDp < 360
 
@@ -92,66 +89,12 @@ fun HomeScreen(
                 },
             )
 
-            EsikCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = profile.targetAppLabel,
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                text = "Bugünkü kullanım",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        TextButton(onClick = onRefresh) {
-                            Text("Yenile")
-                        }
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(EsikSpacing.small),
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        Text(
-                            text = usageMinutes.toString(),
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = "dakika",
-                            modifier = Modifier.padding(bottom = 5.dp),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = "0 dk",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "Kendi hedefin ${profile.dailyLimitMinutes} dk",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-                }
-            }
+            UsageHeroCard(
+                targetAppLabel = profile.targetAppLabel,
+                usageMinutes = usageMinutes,
+                limitMinutes = profile.dailyLimitMinutes,
+                onRefresh = onRefresh,
+            )
 
             EsikCard {
                 Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
@@ -277,6 +220,13 @@ fun HomeScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
 
                     Text("Günlük hedef", style = MaterialTheme.typography.titleMedium)
+                    LimitPresetPicker(
+                        currentLimitMinutes = profile.dailyLimitMinutes,
+                        onSelect = { preset ->
+                            limitText = preset.toString()
+                            onUpdateLimit(preset)
+                        },
+                    )
                     OutlinedTextField(
                         value = limitText,
                         onValueChange = { limitText = it.filter(Char::isDigit).take(4) },
