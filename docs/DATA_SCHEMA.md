@@ -1,13 +1,13 @@
-# Frozen Data Contract — Schema v3
+# Frozen Data Contract — Schema v4
 
-This document defines the persisted device-local contract and the current structured AI contracts. Existing schema-v1/v2 files remain readable: v3 fields have defaults and old records are not deleted.
+This document defines the persisted device-local contract and the current structured AI contracts. Existing schema-v1/v2/v3 files remain readable: newer fields have defaults and old records are never deleted or rewritten.
 
 ## Persisted device state
 
 ```json
 {
   "profil": {
-    "sema_surum": 3,
+    "sema_surum": 4,
     "isim": "Ayşe",
     "bolum": "İstatistik",
     "hobiler": ["gitar", "koşu"],
@@ -65,6 +65,9 @@ This document defines the persisted device-local contract and the current struct
       "ai_aktivite_basligi": "İlk 3 dakika",
       "ai_sure_dk": 3,
       "ai_strateji": "micro_start",
+      "tetikleyici": "rapid_reopen_loop",
+      "tahmin_durum": "habit",
+      "tahmin_kabul": false,
       "secim": "vazgectim"
     }
   ]
@@ -72,6 +75,21 @@ This document defines the persisted device-local contract and the current struct
 ```
 
 The persisted intervention record stores visible AI fields plus the selected strategy metadata, not the compiled local policy.
+
+## Behavioural signals
+
+`tetikleyici` records why the moment was interrupted. `tahmin_durum` and `tahmin_kabul` record the
+guess the app offered about the current state and whether the user accepted it.
+
+`tahmin_kabul` is **absent** when no guess was offered. It is never written as `false` for a moment
+the user was simply not asked about: silence is not a rejection, and the calibration that decides
+whether to keep guessing counts only explicit answers.
+
+The signals behind a guess — session lengths, open counts, the personal median session, the gap
+since the last visit, the app used immediately before, the current unbroken run of device use, the
+hour, and charging state — are derived on the device from the usage-access data the user already
+granted, interpreted on the device, and never persisted or transmitted. Only the resulting state ID
+is stored.
 
 ## Stable persisted enums
 
@@ -85,6 +103,21 @@ The persisted intervention record stores visible AI fields plus the selected str
 
 - `yine_de_gir`
 - `vazgectim`
+
+### `tetikleyici`
+
+- `threshold` — the user reached the limit they set
+- `immediate_reopen` — reopened within 30 seconds of leaving
+- `rapid_reopen_loop` — three or more opens within ten minutes
+- `session_drift` — session at least three times the user's own median
+
+An empty or unrecognised value means no trigger was recorded, and is never guessed at.
+
+### `tahmin_durum`
+
+A canonical quick-state ID, or empty when no guess was offered. Inference currently produces only
+`late_night`, `habit`, `tired` and `bored`; every other canonical state is reached by the user
+choosing it.
 
 ### `ton`
 
