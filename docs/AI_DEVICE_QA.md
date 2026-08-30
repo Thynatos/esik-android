@@ -1,19 +1,19 @@
 # Eşik AI Quality v2 — Device QA
 
-Use this checklist for `feature/ai-quality-v2`. The UI redesign is developed separately; this branch validates AI behavior without changing the visible Compose design.
+Use this checklist for the frozen `feature/final-integration` candidate. It validates the integrated AI, UI, overlay, and fallback behavior without changing the build between runs.
 
 ## 1. Check out the branch
 
 ```powershell
 git fetch origin
-git switch -c feature/ai-quality-v2 --track origin/feature/ai-quality-v2
+git switch feature/final-integration
+git pull --ff-only
 ```
 
-If the local branch already exists:
+If the local branch does not exist yet:
 
 ```powershell
-git switch feature/ai-quality-v2
-git pull --ff-only
+git switch -c feature/final-integration --track origin/feature/final-integration
 ```
 
 ## 2. Local configuration
@@ -26,7 +26,7 @@ GEMINI_API_KEY=<your-local-demo-key>
 GEMINI_FAST_MODEL=gemini-2.5-flash-lite
 GEMINI_PROFILE_MODEL=gemini-2.5-flash-lite
 GEMINI_CARD_MODEL=gemini-2.5-flash-lite
-GEMINI_REPORT_MODEL=gemini-2.5-flash
+GEMINI_REPORT_MODEL=gemini-3.6-flash
 ```
 
 Do not commit, paste, screenshot, or record the key.

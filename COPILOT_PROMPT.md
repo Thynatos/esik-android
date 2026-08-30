@@ -1,6 +1,6 @@
-# Eşik — Current Feature Executor Prompt
+# Eşik — Frozen Candidate Blocker-Fix Prompt
 
-Use this prompt when a coding agent is asked to implement an optional feature or fix after the validated baseline.
+Use this prompt only when a coding agent is asked to fix a reproduced crash or demo-blocking defect after feature freeze.
 
 ## First: verify the current baseline
 
@@ -22,16 +22,16 @@ The old `work/*`, `feature/ai-personalization`, `feature/ui-product-redesign`, a
 
 ## Branch workflow
 
-Unless the project owner explicitly requests work directly on the integration branch, implement optional work on one narrow branch created from the latest integration baseline:
+Do not implement optional work. For a reproduced crash or demo blocker, use one narrow branch created from the latest integration baseline:
 
 ```powershell
 git fetch origin
 git switch feature/final-integration
 git pull --ff-only
-git switch -c feature/<short-name>
+git switch -c fix/<short-name>
 ```
 
-Do not create a second integration branch. Do not merge to `main`. PR #7 is the single final integration PR to `main` while optional development continues.
+Do not create a second integration branch. Do not merge to `main`. PR #7 is the single final integration PR from the frozen candidate. Behavior inference, new reports/screens, redesigns, polling changes, and prompt/model experiments are out of scope.
 
 ## Current product contract
 

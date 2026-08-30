@@ -434,7 +434,7 @@ Defaults remain configurable without source changes:
 GEMINI_FAST_MODEL=gemini-2.5-flash-lite
 GEMINI_PROFILE_MODEL=gemini-2.5-flash-lite
 GEMINI_CARD_MODEL=gemini-2.5-flash-lite
-GEMINI_REPORT_MODEL=gemini-2.5-flash
+GEMINI_REPORT_MODEL=gemini-3.6-flash
 ```
 
 Current task settings:
@@ -444,9 +444,9 @@ Current task settings:
 | Profile | 0.15 | 900 | Yes, with compatibility fallback |
 | Card | 0.15 | 480 | Yes, with compatibility fallback |
 | Card repair | 0.0 | 420 | Yes, with compatibility fallback |
-| Report | 0.1 | 520 | Yes, with compatibility fallback |
+| Report | 0.1 | 2,048 | Yes, with compatibility fallback |
 
-The final model choice must be based on the device scenario matrix in `docs/AI_EVALUATION.md`, considering quality, latency, fallback rate, and reliability.
+This model/configuration set is frozen for the validated demo. The report budget and model reflect the provider issue and successful retest recorded in `docs/AI_EVALUATION.md`.
 
 ---
 

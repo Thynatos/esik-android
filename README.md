@@ -135,9 +135,9 @@ Validated on emulator and physical Android hardware:
 
 See `docs/FINALIZATION.md`, `docs/AI_DEVICE_QA.md`, `docs/AI_EVALUATION.md`, and `docs/VALIDATION.md` for details.
 
-## Development workflow from this point
+## Frozen submission workflow
 
-The original parallel hackathon branches are historical. The active workflow is intentionally simpler:
+The original parallel hackathon branches are historical. Feature work is frozen after PR #18:
 
 ```text
 main                         protected, demo/release history
@@ -145,29 +145,26 @@ main                         protected, demo/release history
   |
 PR #7
   |
-feature/final-integration    current integration + submission candidate
-  ^
-  |
-feature/<small-feature>      one feature or fix at a time
+feature/final-integration    frozen integration + submission candidate
 ```
 
-Rules for remaining development:
+Rules from this point:
 
 1. Do not work directly on `main`.
 2. Do not add new work to the old UI/AI sprint branches.
-3. Create each remaining feature from the latest `feature/final-integration`.
-4. Keep each feature narrow and merge it back into `feature/final-integration` only after tests/build pass.
-5. Keep PR #7 as the single final PR to `main` while feature work is still happening.
-6. At final freeze, run the full demo route twice, mark PR #7 ready, obtain the required review, and squash-merge it to `main`.
-7. After the final merge, rotate/delete the hackathon Gemini key.
+3. Do not add optional behavior, reports, screens, redesigns, polling changes, or AI experiments.
+4. Reopen code only for a reproduced crash or demo-blocking defect, on one narrow branch with proportional validation.
+5. Keep PR #7 as the single final PR to `main`.
+6. Run the frozen demo route twice, obtain the required review, and wait for the project owner's explicit final-merge authorization.
+7. After the presentation/submission, rotate or revoke the hackathon Gemini key.
 
-Suggested feature setup:
+Emergency blocker setup:
 
 ```powershell
 git fetch origin
 git switch feature/final-integration
 git pull --ff-only
-git switch -c feature/<name>
+git switch -c fix/<demo-blocker>
 ```
 
 ## Demo diagnostics
@@ -197,5 +194,7 @@ Diagnostics intentionally log task/model/source/outcome/latency rather than raw 
 - `docs/DATA_SCHEMA.md` — local persistence contract
 - `docs/VALIDATION.md` — Android/core validation record
 - `docs/FINALIZATION.md` — current baseline status, workflow, and remaining non-feature gates
+- `docs/HACKATHON_REPORT.md` — submission-ready project report
+- `docs/DEMO_SCRIPT.md` — frozen five-minute demo and recording checklist
 
 The older team/sprint/handoff files are retained as implementation history, not as the active workflow.
