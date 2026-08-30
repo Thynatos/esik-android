@@ -38,6 +38,7 @@ import com.thynatos.esik.ai.SafetyLanguageValidator
 import com.thynatos.esik.data.AiCard
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionInputMethod
+import com.thynatos.esik.data.InterventionRecord
 import com.thynatos.esik.data.UserChoice
 import com.thynatos.esik.data.UserProfile
 import com.thynatos.esik.ui.components.EsikCard
@@ -57,6 +58,7 @@ fun InterventionScreen(
     profile: UserProfile,
     usageMinutes: Int,
     aiGateway: AiGateway,
+    recentRecords: List<InterventionRecord> = emptyList(),
     onChoice: (InterventionInput, AiCard, UserChoice) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -103,16 +105,16 @@ fun InterventionScreen(
         isLoading = true
         scope.launch {
             val result = try {
-                aiGateway.generateCard(profile, usageMinutes, input)
+                aiGateway.generateCard(profile, usageMinutes, input, recentRecords)
             } catch (_: Exception) {
-                MockAiGateway().generateCard(profile, usageMinutes, input)
+                MockAiGateway().generateCard(profile, usageMinutes, input, recentRecords)
             }
             generatedCard = if (
                 SafetyLanguageValidator.isDisplaySafe(result.question, result.alternative)
             ) {
                 result
             } else {
-                MockAiGateway().generateCard(profile, usageMinutes, input)
+                MockAiGateway().generateCard(profile, usageMinutes, input, recentRecords)
             }
             isLoading = false
         }

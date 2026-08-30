@@ -44,10 +44,14 @@ data class PersonalizationProfile(
 ) {
     fun quickStatesOrDefault(): List<QuickStateOption> =
         quickStates
-            .filter { it.id.isNotBlank() && it.label.isNotBlank() }
+            .mapNotNull { option ->
+                QuickStateTaxonomy.canonicalize(option.id)?.let { id -> option.copy(id = id) }
+            }
+            .filter { it.label.isNotBlank() }
             .distinctBy { it.id }
+            .take(6)
             .takeIf { it.size >= 3 }
-            ?: PersonalizationDefaults.quickStates
+            ?: PersonalizationDefaults.quickStates.take(6)
 }
 
 data class QuickStateOption(

@@ -185,7 +185,7 @@ class JsonEsikRepository internal constructor(private val stateFile: File) : Esi
         return buildList {
             for (index in 0 until length()) {
                 val item = optJSONObject(index) ?: continue
-                val id = item.optString("id").trim()
+                val id = QuickStateTaxonomy.canonicalize(item.optString("id")) ?: continue
                 val label = item.optString("etiket").trim()
                 if (id.isEmpty() || label.isEmpty()) continue
                 add(

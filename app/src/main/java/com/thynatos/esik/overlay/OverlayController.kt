@@ -277,11 +277,12 @@ class OverlayController(
                 background = roundedBackground(accentContainer, 16f)
                 text = "Sana uygun küçük bir seçenek hazırlanıyor…"
             }
+            val recentRecords = repository.loadRecords().takeLast(6)
             requestJob = scope.launch {
                 val generated = try {
-                    aiGateway.generateCard(profile, usageMinutes, inputData)
+                    aiGateway.generateCard(profile, usageMinutes, inputData, recentRecords)
                 } catch (_: Exception) {
-                    MockAiGateway().generateCard(profile, usageMinutes, inputData)
+                    MockAiGateway().generateCard(profile, usageMinutes, inputData, recentRecords)
                 }
                 val safeResult = if (
                     SafetyLanguageValidator.isDisplaySafe(
@@ -291,7 +292,7 @@ class OverlayController(
                 ) {
                     generated
                 } else {
-                    MockAiGateway().generateCard(profile, usageMinutes, inputData)
+                    MockAiGateway().generateCard(profile, usageMinutes, inputData, recentRecords)
                 }
                 renderCard(inputData, safeResult)
             }
@@ -443,6 +444,10 @@ class OverlayController(
                 inputMethod = input.method,
                 aiQuestion = card.question,
                 aiAlternative = card.alternative,
+                aiReflection = card.reflection,
+                aiActivityTitle = card.activityTitle,
+                aiDurationMinutes = card.durationMinutes,
+                aiStrategy = card.strategy,
             ),
         )
     }

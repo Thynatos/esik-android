@@ -12,6 +12,7 @@ import com.thynatos.esik.data.PersonalizationProfile
 import com.thynatos.esik.data.ProfileIntake
 import com.thynatos.esik.data.ProfileTone
 import com.thynatos.esik.data.QuickStateOption
+import com.thynatos.esik.data.QuickStateTaxonomy
 import com.thynatos.esik.data.UserChoice
 import com.thynatos.esik.data.UserProfile
 import org.json.JSONArray
@@ -90,18 +91,22 @@ class GeminiAiGateway(
         profile: UserProfile,
         currentUsageMinutes: Int,
         input: InterventionInput,
+        recentRecords: List<InterventionRecord>,
     ): AiCard {
         val startedAt = SystemClock.elapsedRealtime()
         val externalContext = listOf(
             input.text,
             profile.reason,
+            profile.personalization.profileSummary,
+            profile.personalization.focusTargets.joinToString(" "),
             profile.personalization.goals.joinToString(" "),
+            profile.personalization.recurringContexts.joinToString(" "),
             profile.personalization.preferredActivities.joinToString(" "),
             profile.personalization.lowEnergyActivities.joinToString(" "),
         ).joinToString(" ")
         if (!client.isConfigured) {
             debugResult(TASK_CARD, cardModel, startedAt, SOURCE_FALLBACK, "not_configured")
-            return fallback.generateCard(profile, currentUsageMinutes, input)
+            return fallback.generateCard(profile, currentUsageMinutes, input, recentRecords)
         }
         if (containsCrisisSignal(externalContext)) {
             debugResult(
@@ -111,21 +116,31 @@ class GeminiAiGateway(
                 SOURCE_FALLBACK,
                 "crisis_short_circuit",
             )
-            return fallback.generateCard(profile, currentUsageMinutes, input)
+            return fallback.generateCard(profile, currentUsageMinutes, input, recentRecords)
         }
 
         val policy = InterventionContextBuilder.build(profile, input)
+        val recentContext = RecentInterventionContextBuilder.build(recentRecords)
+        val recentAlternatives = RecentInterventionContextBuilder.recentAlternatives(recentRecords)
         return try {
             val completion = completeJsonWithSchemaFallback(
                 model = cardModel,
                 systemPrompt = AiPrompts.CARD_SYSTEM_PROMPT,
-                userPrompt = cardInputJson(profile, currentUsageMinutes, input, policy).toString(2),
-                maxTokens = 480,
-                temperature = 0.15,
+                userPrompt = cardInputJson(
+                    profile = profile,
+                    currentUsageMinutes = currentUsageMinutes,
+                    input = input,
+                    policy = policy,
+                    recentContext = recentContext,
+                ).toString(2),
+                maxTokens = 700,
+                temperature = 0.35,
                 responseSchema = CARD_RESPONSE_SCHEMA,
             )
             val firstCard = runCatching { parseStructuredCard(completion.text) }.getOrNull()
-            val firstValidation = firstCard?.let { AiCardSemanticValidator.validate(it, policy) }
+            val firstValidation = firstCard?.let {
+                AiCardSemanticValidator.validate(it, policy, recentAlternatives)
+            }
                 ?: CardValidationResult(listOf("structured_card_parse_failed"))
 
             if (firstCard != null && firstValidation.isValid) {
@@ -142,6 +157,7 @@ class GeminiAiGateway(
                     invalidResponse = completion.text,
                     policy = policy,
                     validationErrors = firstValidation.errors,
+                    recentAlternatives = recentAlternatives,
                 )
                 if (repaired != null) {
                     debugResult(TASK_CARD, cardModel, startedAt, SOURCE_REPAIRED, "ok")
@@ -154,7 +170,7 @@ class GeminiAiGateway(
                         SOURCE_FALLBACK,
                         firstValidation.errors.firstOrNull() ?: "invalid_live_output",
                     )
-                    fallback.generateCard(profile, currentUsageMinutes, input)
+                    fallback.generateCard(profile, currentUsageMinutes, input, recentRecords)
                 }
             }
         } catch (error: Exception) {
@@ -165,7 +181,7 @@ class GeminiAiGateway(
                 SOURCE_FALLBACK,
                 failureCategory(error),
             )
-            fallback.generateCard(profile, currentUsageMinutes, input)
+            fallback.generateCard(profile, currentUsageMinutes, input, recentRecords)
         }
     }
 
@@ -265,6 +281,7 @@ class GeminiAiGateway(
         invalidResponse: String,
         policy: InterventionPolicy,
         validationErrors: List<String>,
+        recentAlternatives: List<String>,
     ): StructuredAiCard? = runCatching {
         val completion = completeJsonWithSchemaFallback(
             model = cardModel,
@@ -273,13 +290,16 @@ class GeminiAiGateway(
                 invalidResponse = invalidResponse,
                 policy = policy,
                 validationErrors = validationErrors,
+                recentAlternatives = recentAlternatives,
             ).toString(2),
             maxTokens = 420,
             temperature = 0.0,
             responseSchema = CARD_RESPONSE_SCHEMA,
         )
         val repaired = parseStructuredCard(completion.text)
-        repaired.takeIf { AiCardSemanticValidator.validate(it, policy).isValid }
+        repaired.takeIf {
+            AiCardSemanticValidator.validate(it, policy, recentAlternatives).isValid
+        }
     }.getOrNull()
 
     private suspend fun completeJsonWithSchemaFallback(
@@ -357,7 +377,9 @@ class GeminiAiGateway(
             ?: throw GeminiApiException("Card need is invalid")
         val strategy = InterventionStrategy.fromWire(json.optString("strategy"))
             ?: throw GeminiApiException("Card strategy is invalid")
+        val reflection = json.optString("reflection").trim()
         val question = json.optString("question").trim()
+        val activityTitle = json.optString("activity_title").trim()
         val alternative = json.optString("alternative").trim()
         val durationMinutes = json.optInt("duration_minutes", -1)
         val personalizationAnchor = json.optString("personalization_anchor").trim()
@@ -367,7 +389,9 @@ class GeminiAiGateway(
         return StructuredAiCard(
             need = need,
             strategy = strategy,
+            reflection = reflection,
             question = question,
+            activityTitle = activityTitle,
             alternative = alternative,
             durationMinutes = durationMinutes,
             personalizationAnchor = personalizationAnchor,
@@ -389,7 +413,14 @@ class GeminiAiGateway(
     }
 
     private fun StructuredAiCard.toVisibleCard(): AiCard =
-        AiCard(question = question, alternative = alternative)
+        AiCard(
+            reflection = reflection,
+            question = question,
+            activityTitle = activityTitle,
+            alternative = alternative,
+            durationMinutes = durationMinutes,
+            strategy = strategy.wireValue,
+        )
 
     private fun extractJson(raw: String): JSONObject {
         val start = raw.indexOf('{')
@@ -423,6 +454,7 @@ class GeminiAiGateway(
         currentUsageMinutes: Int,
         input: InterventionInput,
         policy: InterventionPolicy,
+        recentContext: List<RecentInterventionContext>,
     ): JSONObject = JSONObject()
         .put("local_time", Instant.now().atZone(ZoneId.systemDefault()).toLocalTime().toString())
         .put("target_app", profile.targetAppLabel)
@@ -432,16 +464,54 @@ class GeminiAiGateway(
         .put("selected_state_label", input.stateLabel)
         .put("user_text", input.text.take(MAX_USER_TEXT_CHARS))
         .put("input_method", input.method.storageValue)
+        .put("user_model", profile.userModelJson())
         .put("compiled_policy", policy.toJson())
+        .put(
+            "recent_interventions",
+            JSONArray().apply {
+                recentContext.forEach { recent ->
+                    put(
+                        JSONObject()
+                            .put("state", recent.state)
+                            .put("choice", recent.choice)
+                            .put("previous_alternative", recent.previousAlternative),
+                    )
+                }
+            },
+        )
+
+    private fun UserProfile.userModelJson(): JSONObject =
+        JSONObject()
+            .put("summary", personalization.profileSummary.take(MAX_PROFILE_SUMMARY_CHARS))
+            .put("goals", JSONArray(personalization.goals.take(MAX_MODEL_ITEMS)))
+            .put("focus_targets", JSONArray(personalization.focusTargets.take(MAX_MODEL_ITEMS)))
+            .put(
+                "recurring_contexts",
+                JSONArray(personalization.recurringContexts.take(MAX_MODEL_ITEMS)),
+            )
+            .put(
+                "preferred_activities",
+                JSONArray(personalization.preferredActivities.take(MAX_MODEL_ITEMS)),
+            )
+            .put(
+                "low_energy_activities",
+                JSONArray(personalization.lowEnergyActivities.take(MAX_MODEL_ITEMS)),
+            )
+            .put("tone", personalization.tone.storageValue)
 
     private fun repairInputJson(
         invalidResponse: String,
         policy: InterventionPolicy,
         validationErrors: List<String>,
+        recentAlternatives: List<String>,
     ): JSONObject = JSONObject()
         .put("compiled_policy", policy.toJson())
         .put("invalid_response", invalidResponse.take(MAX_INVALID_RESPONSE_CHARS))
         .put("validation_errors", JSONArray(validationErrors.take(MAX_VALIDATION_ERRORS)))
+        .put(
+            "recent_alternatives",
+            JSONArray(recentAlternatives.map { it.take(MAX_RECENT_ALTERNATIVE_CHARS) }),
+        )
 
     private fun InterventionPolicy.toJson(): JSONObject = JSONObject()
         .put("resolved_state_id", resolvedStateId)
@@ -538,9 +608,7 @@ class GeminiAiGateway(
         return buildList {
             for (index in 0 until length()) {
                 val item = optJSONObject(index) ?: continue
-                val id = item.optString("id").trim().lowercase().replace(NON_ID_CHARS, "_")
-                    .trim('_')
-                    .take(40)
+                val id = QuickStateTaxonomy.canonicalize(item.optString("id")) ?: continue
                 val label = item.optString("label").trim().take(70)
                 if (
                     id.isBlank() ||
@@ -607,13 +675,15 @@ class GeminiAiGateway(
         const val SOURCE_REPAIRED = "repaired"
         const val SOURCE_FALLBACK = "local_fallback"
 
-        val NON_ID_CHARS = Regex("[^a-z0-9]+")
         const val REPORT_MINIMUM_RECORDS = 7
         const val MAX_USER_TEXT_CHARS = 2_000
         const val MAX_PROFILE_ITEM_CHARS = 120
+        const val MAX_PROFILE_SUMMARY_CHARS = 320
+        const val MAX_MODEL_ITEMS = 6
         const val MAX_REPORT_RECORDS = 30
         const val MAX_REPORT_TEXT_CHARS = 240
         const val MAX_INVALID_RESPONSE_CHARS = 2_000
+        const val MAX_RECENT_ALTERNATIVE_CHARS = 240
         const val MAX_VALIDATION_ERRORS = 8
 
         val CARD_RESPONSE_SCHEMA: JSONObject = JSONObject()
@@ -641,7 +711,9 @@ class GeminiAiGateway(
                                 ),
                             ),
                     )
+                    .put("reflection", JSONObject().put("type", "string"))
                     .put("question", JSONObject().put("type", "string"))
+                    .put("activity_title", JSONObject().put("type", "string"))
                     .put("alternative", JSONObject().put("type", "string"))
                     .put(
                         "duration_minutes",
@@ -658,7 +730,9 @@ class GeminiAiGateway(
                     listOf(
                         "need",
                         "strategy",
+                        "reflection",
                         "question",
+                        "activity_title",
                         "alternative",
                         "duration_minutes",
                         "personalization_anchor",
