@@ -31,10 +31,11 @@ The goal of this pass is to finish the current product and repository workflow f
 | Daily report threshold | PASS | Live synthesis is withheld below seven records. |
 | Daily report counts | PASS | Numeric facts are computed locally. |
 | Daily report AI | PASS | Evidence-constrained live report validated after gateway fixes. |
-| Data deletion | IMPLEMENTED | Profile/records are deleted; monitoring stops and cooldown is cleared by the app flow. |
+| Daily report loading UX | IMPLEMENTED | Home now shows/disables the report action while the reflection is being generated instead of appearing frozen. |
+| Data deletion | PASS / polished | Clear-data logic was validated; the action is now visible in a product-level data section and requires destructive confirmation. |
 | Backup privacy | PASS | Profile/records and monitoring preferences are excluded from cloud backup and device transfer. |
-| Launcher identity | PASS | Eşik now has an explicit launcher/round icon instead of relying on a generic system icon. |
-| CI | PASS | Unit tests and debug APK assembly run on feature pushes. |
+| App identity | IMPLEMENTED | Explicit Eşik launcher/round icon and foreground-monitor notification icon replace generic/default identity. |
+| CI | PASS / simplified | CI runs for PRs into `feature/final-integration` or `main`, plus pushes to `main`, avoiding duplicate feature-push + PR runs. |
 
 ## Combined QA gate — 2026-08-30
 
@@ -58,9 +59,11 @@ Two issues were reproduced directly against the API and fixed in commit `9538ed7
 1. The report's previous 520-token budget could be consumed by model reasoning, producing `MAX_TOKENS` before the JSON answer. The report budget is now 2,048 tokens.
 2. `additionalProperties` was not accepted by the tested report model's structured-output schema subset. The unsupported field was removed from the app schemas so structured output is used directly instead of unnecessarily falling back to schema-less generation.
 
+The validated report model is now also the repository default, so a fresh local configuration matches the tested baseline unless explicitly overridden.
+
 ### Physical Android phone
 
-The final combined build was installed and smoke-tested after the integration and gateway fixes.
+The combined build was installed and smoke-tested after integration and the report gateway fixes.
 
 Confirmed:
 
@@ -71,6 +74,8 @@ Confirmed:
 - physical speech recognition returns to the intervention;
 - both final decisions dismiss correctly;
 - seeded daily report opens and generates successfully.
+
+A finalization-only polish pass was added afterward (launcher/notification icons, report loading copy, visible/confirmed data deletion). After pulling the latest baseline, these visual changes need only a short smoke check; they do not alter the validated monitor/overlay/AI decision logic.
 
 ## AI configuration used for the validated demo build
 
@@ -88,7 +93,9 @@ The current baseline intentionally includes these controls:
 
 - no account or remote app database;
 - profile and records stored in app-private local storage;
-- sensitive state excluded from Android backup/device transfer;
+- relevant context may be sent to Gemini only for live AI generation, as disclosed in onboarding;
+- sensitive persisted state excluded from Android backup/device transfer;
+- visible in-app local-data deletion with confirmation;
 - no API key in source control;
 - crisis-signalling text bypasses Gemini;
 - AI never sets or recommends the usage threshold;
@@ -99,12 +106,12 @@ The current baseline intentionally includes these controls:
 
 ## Baseline repository workflow
 
-The earlier role branches and parallel UI/AI branches are finished implementation history. New work should use one integration candidate and small feature branches.
+The earlier role branches and parallel UI/AI branches are finished implementation history. PRs #2, #4, and #5 are closed as superseded. PR #7 is the single final integration PR and targets protected `main` directly.
 
 ```text
 main
   ^
-  | PR #7 (single final submission PR)
+  | PR #7 (single final submission PR; keep draft while optional features continue)
   |
 feature/final-integration
   ^
@@ -118,19 +125,24 @@ feature/<small-feature>
 2. `feature/final-integration` is the current known-good candidate.
 3. Every optional feature begins from the latest `feature/final-integration`.
 4. A feature branch owns one coherent change; avoid mixing unrelated polish or refactors.
-5. Run `test` and `assembleDebug` before merging a feature back into the integration candidate.
-6. Perform the smallest device check that exercises the changed behavior.
+5. Open the feature PR back into `feature/final-integration`; CI runs there.
+6. Run `test` and `assembleDebug` and perform the smallest device check that exercises the changed behavior.
 7. PR #7 remains the single final PR to `main` until feature work stops.
-8. At final freeze, mark PR #7 ready, obtain the required approval, squash-merge to `main`, and rotate/delete the hackathon API key.
+8. Do not merge PR #7 without the project owner's explicit final-merge request.
+9. At final freeze, mark PR #7 ready, obtain the required approval, squash-merge to `main`, and rotate/delete the hackathon API key after the demo/submission.
+
+Current instructions are synchronized across `AGENTS.md`, `COPILOT_PROMPT.md`, `.github/copilot-instructions.md`, `.github/prompts/esik-build.prompt.md`, and `.github/instructions/android.instructions.md`. `docs/README.md` separates current source-of-truth documents from historical sprint/handoff material.
 
 ## Non-feature release gates
 
 These are final release/submission tasks, not new product features:
 
-- keep GitHub Actions green after each baseline/future-feature commit;
+- keep GitHub Actions green after each integrated feature;
+- after the latest finalization polish, do one short install/visual smoke check for the new icons, report-loading state, and data-delete confirmation;
 - update this document when a feature changes the validated demo route;
-- run the exact final demo route twice consecutively after the last feature is merged;
+- run the exact final demo route twice consecutively after the last optional feature is merged;
 - capture a backup screen recording of the final demo route;
+- set the final version name/code only after optional feature work stops;
 - verify the API key is present only on the demo machine/phone build and not in Git history;
 - prepare the required 1–2 page hackathon report and roughly five-minute demo;
 - after submission/demo, rotate or revoke the embedded hackathon key.
@@ -164,4 +176,4 @@ After implementation:
 git push -u origin feature/<feature-name>
 ```
 
-Then merge that narrow feature back into `feature/final-integration` through review, re-run the affected device path, and continue.
+Open a narrow PR into `feature/final-integration`, let CI pass, run the affected device path, then merge the feature into the integration candidate. PR #7 will automatically accumulate the integrated feature for the eventual final merge to `main`.
