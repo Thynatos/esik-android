@@ -23,6 +23,14 @@ val geminiFastModel = localProperties.getProperty(
     "GEMINI_FAST_MODEL",
     "gemini-2.5-flash-lite",
 )
+val geminiProfileModel = localProperties.getProperty(
+    "GEMINI_PROFILE_MODEL",
+    geminiFastModel,
+)
+val geminiCardModel = localProperties.getProperty(
+    "GEMINI_CARD_MODEL",
+    geminiFastModel,
+)
 val geminiReportModel = localProperties.getProperty(
     "GEMINI_REPORT_MODEL",
     "gemini-2.5-flash",
@@ -42,6 +50,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GEMINI_API_KEY", geminiApiKey.asBuildConfigString())
         buildConfigField("String", "GEMINI_FAST_MODEL", geminiFastModel.asBuildConfigString())
+        buildConfigField("String", "GEMINI_PROFILE_MODEL", geminiProfileModel.asBuildConfigString())
+        buildConfigField("String", "GEMINI_CARD_MODEL", geminiCardModel.asBuildConfigString())
         buildConfigField("String", "GEMINI_REPORT_MODEL", geminiReportModel.asBuildConfigString())
     }
 
