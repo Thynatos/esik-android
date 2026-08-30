@@ -48,12 +48,14 @@ Home shows:
 - today’s local usage minutes;
 - the user’s own threshold;
 - monitoring state;
-- permission repair when required;
+- required Usage Access / overlay permission repair when needed;
+- optional Android 13+ notification permission so background monitoring is visible in the notification area;
 - threshold editing;
-- daily-report entry;
+- daily-report entry with a visible loading state;
+- a visible local-data section with destructive confirmation;
 - discreet developer/demo controls for the hackathon build.
 
-The user can start/stop monitoring and open the selected target app.
+The user can start/stop monitoring and open the selected target app. Notification permission is requested contextually when monitoring is started if it has not already been granted, but denial does not block the core tracking flow.
 
 ### 3. Intervention
 
@@ -129,6 +131,7 @@ Visible report content:
 onboarding
   -> local profile + user-defined target/threshold saved
   -> user starts monitoring
+  -> optional notification permission request if needed
   -> foreground service polls every 60 seconds
   -> target app is foreground
   -> local usage >= user threshold
@@ -145,6 +148,8 @@ onboarding
   -> record saved locally
   -> eligible daily report uses current-date local evidence
 ```
+
+The Compose intervention and report screens also route Android system Back to Home instead of unexpectedly exiting the activity.
 
 ## AI task split
 
@@ -184,7 +189,7 @@ Stored locally:
 
 The profile/records file and monitoring preferences are excluded from Android cloud backup and device transfer.
 
-The app provides a one-action data deletion flow that stops monitoring, clears cooldown state, and deletes local repository data.
+The app provides a visible one-action data deletion flow with confirmation; deletion stops monitoring, clears cooldown state, and deletes local repository data.
 
 The Gemini API key is never committed, but the hackathon-only mobile-direct architecture embeds the local key in the APK. Production requires a server-side/short-lived credential architecture.
 
@@ -199,7 +204,8 @@ The Gemini API key is never committed, but the hackathon-only mobile-direct arch
 | Hallucinated personalization | profile grounding sanitizer + allowed anchor checks |
 | Effort mismatch | state/energy-specific local policy and allowed strategy set |
 | Provider/network failure | bounded request/repair and deterministic local fallback |
-| Privacy | app-private storage, backup exclusions, delete action, privacy-safe diagnostics |
+| Privacy | app-private storage, backup exclusions, visible delete action, privacy-safe diagnostics |
+| Monitoring transparency | foreground service, explicit Eşik notification icon, contextual optional notification permission |
 | Secret exposure | ignored local key; direct mobile integration explicitly hackathon-only |
 
 ## Current baseline and optional features
