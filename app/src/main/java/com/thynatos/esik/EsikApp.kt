@@ -249,6 +249,7 @@ fun EsikApp(
                 profile = activeProfile,
                 usageMinutes = interventionUsageMinutes,
                 aiGateway = aiGateway,
+                recentRecords = records,
                 onChoice = { input, card, choice ->
                     val record = InterventionRecord(
                         timestampEpochMillis = System.currentTimeMillis(),
@@ -260,6 +261,10 @@ fun EsikApp(
                         inputMethod = input.method,
                         aiQuestion = card.question,
                         aiAlternative = card.alternative,
+                        aiReflection = card.reflection,
+                        aiActivityTitle = card.activityTitle,
+                        aiDurationMinutes = card.durationMinutes,
+                        aiStrategy = card.strategy,
                     )
                     repository.appendRecord(record)
                     records = records + record

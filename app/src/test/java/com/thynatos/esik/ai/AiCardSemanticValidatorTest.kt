@@ -108,6 +108,99 @@ class AiCardSemanticValidatorTest {
         assertTrue(result.errors.contains("invented_or_unverified_live_content"))
     }
 
+    @Test
+    fun rejectsFormalVoice() {
+        val result = AiCardSemanticValidator.validate(
+            validCard().copy(
+                reflection = "Size kısa bir ara iyi gelebilir.",
+                alternative = "Telefonu masaya bırakıp iki dakika dinleyebilirsiniz.",
+            ),
+            policy,
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(result.errors.contains("formal_siz_language"))
+    }
+
+    @Test
+    fun rejectsUnsafeReflection() {
+        val result = AiCardSemanticValidator.validate(
+            validCard().copy(
+                reflection = "Tembel olduğun için başlayamıyorsun.",
+            ),
+            policy,
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(
+            result.errors.contains("unsafe_or_judgmental_language") ||
+                result.errors.contains("stock_or_moralizing_language"),
+        )
+    }
+
+    @Test
+    fun rejectsRepeatedRecommendationAgainstRecentHistory() {
+        val result = AiCardSemanticValidator.validate(
+            validCard().copy(
+                activityTitle = "Kısa ekran molası",
+                alternative = "Telefonu masaya bırakıp iki dakika dinlenebilirsin.",
+            ),
+            policy,
+            recentAlternatives = listOf(
+                "Önceki kısa mola: Telefonu masaya bırakıp iki dakika dinlenebilirsin.",
+            ),
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(result.errors.contains("too_similar_to_recent_intervention"))
+    }
+
+    @Test
+    fun acceptsMateriallyDifferentRecommendation() {
+        val result = AiCardSemanticValidator.validate(
+            validCard().copy(
+                activityTitle = "Su molası",
+                alternative = "Bir bardak su içip iki dakika ekrandan uzaklaşabilirsin.",
+            ),
+            policy,
+            recentAlternatives = listOf(
+                "Önceki kısa mola: Telefonu masaya bırakıp iki dakika dinlenebilirsin.",
+            ),
+        )
+
+        assertTrue(result.errors.joinToString(), result.isValid)
+    }
+
+    @Test
+    fun rejectsGenericMotivationalSlogan() {
+        val result = AiCardSemanticValidator.validate(
+            validCard().copy(
+                alternative = "Bir mola vermeyi deneyebilirsin.",
+            ),
+            policy,
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(result.errors.contains("alternative_not_concrete"))
+    }
+
+    @Test
+    fun rejectsOverlongRichCardFields() {
+        val result = AiCardSemanticValidator.validate(
+            validCard().copy(
+                reflection = "a".repeat(131),
+                activityTitle = "a".repeat(46),
+                alternative = "Telefonu masaya bırakıp " + "a".repeat(230),
+            ),
+            policy,
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(result.errors.contains("reflection_too_long"))
+        assertTrue(result.errors.contains("activity_title_too_long"))
+        assertTrue(result.errors.contains("alternative_too_long"))
+    }
+
     private fun validCard(): StructuredAiCard = StructuredAiCard(
         need = InterventionNeed.REST,
         strategy = InterventionStrategy.SENSORY_BREAK,

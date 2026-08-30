@@ -38,6 +38,7 @@ import com.thynatos.esik.ai.SafetyLanguageValidator
 import com.thynatos.esik.data.AiCard
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionInputMethod
+import com.thynatos.esik.data.InterventionRecord
 import com.thynatos.esik.data.UserChoice
 import com.thynatos.esik.data.UserProfile
 import com.thynatos.esik.ui.components.EsikCard
@@ -57,6 +58,7 @@ fun InterventionScreen(
     profile: UserProfile,
     usageMinutes: Int,
     aiGateway: AiGateway,
+    recentRecords: List<InterventionRecord> = emptyList(),
     onChoice: (InterventionInput, AiCard, UserChoice) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -103,16 +105,21 @@ fun InterventionScreen(
         isLoading = true
         scope.launch {
             val result = try {
-                aiGateway.generateCard(profile, usageMinutes, input)
+                aiGateway.generateCard(profile, usageMinutes, input, recentRecords)
             } catch (_: Exception) {
-                MockAiGateway().generateCard(profile, usageMinutes, input)
+                MockAiGateway().generateCard(profile, usageMinutes, input, recentRecords)
             }
             generatedCard = if (
-                SafetyLanguageValidator.isDisplaySafe(result.question, result.alternative)
+                SafetyLanguageValidator.isDisplaySafe(
+                    result.reflection,
+                    result.question,
+                    result.activityTitle,
+                    result.alternative,
+                )
             ) {
                 result
             } else {
-                MockAiGateway().generateCard(profile, usageMinutes, input)
+                MockAiGateway().generateCard(profile, usageMinutes, input, recentRecords)
             }
             isLoading = false
         }
@@ -317,11 +324,13 @@ fun InterventionScreen(
                     )
                     EsikCard(containerColor = MaterialTheme.colorScheme.primaryContainer) {
                         Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
-                            Text(
-                                "DÜŞÜNMEK İÇİN",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            if (card.reflection.isNotBlank()) {
+                                Text(
+                                    card.reflection,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Text(
                                 card.question,
                                 style = MaterialTheme.typography.headlineSmall,
@@ -336,11 +345,26 @@ fun InterventionScreen(
                                     modifier = Modifier.padding(EsikSpacing.large),
                                     verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall),
                                 ) {
-                                    Text(
-                                        "Küçük adım",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            card.activityTitle.ifBlank { "Küçük adım" },
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        if (card.durationMinutes > 0) {
+                                            Text(
+                                                "${card.durationMinutes} dk",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
                                     Text(card.alternative, style = MaterialTheme.typography.bodyLarge)
                                 }
                             }

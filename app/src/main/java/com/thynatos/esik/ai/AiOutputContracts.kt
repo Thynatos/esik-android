@@ -75,6 +75,8 @@ internal data class StructuredAiCard(
     val alternative: String,
     val durationMinutes: Int,
     val personalizationAnchor: String,
+    val reflection: String = "",
+    val activityTitle: String = "",
 )
 
 internal data class StructuredDailyReflection(

@@ -29,6 +29,8 @@ The user provides:
 
 Gemini structures the narrative into a personalization profile containing:
 
+- a concise grounded profile summary;
+- concrete focus targets the user wants to begin, return to, or protect;
 - explicit goals;
 - recurring contexts rather than personality labels;
 - explicitly supplied preferred activities;
@@ -37,6 +39,7 @@ Gemini structures the narrative into a personalization profile containing:
 - six concise quick states.
 
 Generated profile fields are sanitized against the supplied intake before they are stored.
+The user sees a lightweight confirmation of the summary, focus targets, recurring moments, and alternatives before finishing onboarding.
 
 The UI explains that records stay on-device and that relevant text is sent to Gemini only when live AI is used.
 
@@ -92,8 +95,9 @@ Gemini returns a structured internal card containing need, strategy, question, a
 
 Visible output contains:
 
-- one short tentative/open reflection question;
-- one concrete micro-alternative that can begin now.
+- one short supporting reflection;
+- one short tentative/open question;
+- one titled, duration-bounded concrete micro-alternative that can begin now.
 
 Final decisions:
 

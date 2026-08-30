@@ -1,13 +1,13 @@
-# Frozen Data Contract — Schema v2
+# Frozen Data Contract — Schema v3
 
-This document defines the persisted device-local contract and the current structured AI contracts. Existing schema-v1 files remain readable: v2 fields have defaults and old records are not deleted.
+This document defines the persisted device-local contract and the current structured AI contracts. Existing schema-v1/v2 files remain readable: v3 fields have defaults and old records are not deleted.
 
 ## Persisted device state
 
 ```json
 {
   "profil": {
-    "sema_surum": 2,
+    "sema_surum": 3,
     "isim": "Ayşe",
     "bolum": "İstatistik",
     "hobiler": ["gitar", "koşu"],
@@ -26,6 +26,8 @@ This document defines the persisted device-local contract and the current struct
         "bir bardak su içip ekrandan uzaklaşmak"
       ],
       "ton": "supportive_direct",
+      "profil_ozeti": "Özellikle bir işe başlamadan önce ve enerjin düştüğünde Instagram'a kaydığını anlattın.",
+      "odak_hedefleri": ["ders çalışmak"],
       "hizli_durumlar": [
         {
           "id": "tired",
@@ -59,13 +61,17 @@ This document defines the persisted device-local contract and the current struct
       "girdi_yontemi": "quick_reply",
       "ai_soru": "Ertelediğin şeyin yalnızca ilk iki dakikasını yapmak daha ulaşılabilir olabilir mi?",
       "ai_alternatif": "Ödevin için yalnızca ilk iki dakikalık adımı başlatabilirsin.",
+      "ai_yansima": "Başlamak şu anda işin kendisinden daha zor geliyor olabilir.",
+      "ai_aktivite_basligi": "İlk 3 dakika",
+      "ai_sure_dk": 3,
+      "ai_strateji": "micro_start",
       "secim": "vazgectim"
     }
   ]
 }
 ```
 
-The persisted intervention record stores only the visible AI question and alternative, not internal model policy fields.
+The persisted intervention record stores visible AI fields plus the selected strategy metadata, not the compiled local policy.
 
 ## Stable persisted enums
 
@@ -107,6 +113,8 @@ Representative payload:
 
 ```json
 {
+  "profile_summary": "Özellikle bir işe başlamadan önce ve enerjin düştüğünde Instagram'a kaydığını anlattın.",
+  "focus_targets": ["ders çalışmak"],
   "goals": ["daha düzenli çalışmak", "gece daha rahat uyumak"],
   "recurring_contexts": ["yorgunluk", "erteleme"],
   "preferred_activities": ["gitar", "koşu"],
@@ -123,7 +131,22 @@ Representative payload:
 }
 ```
 
-Generated profile content is passed through application-side grounding/sanitization. Missing safe defaults may be completed deterministically; at most six quick states are stored.
+Generated profile content is passed through application-side grounding/sanitization. Missing safe defaults may be completed deterministically; at most six quick states are stored. Quick-state IDs come only from the canonical taxonomy; labels and emoji may be personalized.
+
+### Canonical quick-state IDs
+
+```text
+tired
+procrastinating
+relaxing
+bored
+habit
+waiting
+low_motivation
+overwhelmed
+late_night
+other
+```
 
 ## Intervention local policy contract
 
@@ -157,14 +180,20 @@ The current internal model response is:
 {
   "need": "activation",
   "strategy": "micro_start",
+  "reflection": "Başlama anı şu anda işin kendisinden daha zor geliyor olabilir.",
   "question": "Ertelediğin şeyin yalnızca ilk iki dakikasını yapmak daha ulaşılabilir olabilir mi?",
+  "activity_title": "İlk 3 dakika",
   "alternative": "İlk adımı iki dakika boyunca açıp yapmayı deneyebilirsin.",
   "duration_minutes": 2,
   "personalization_anchor": "daha düzenli çalışmak"
 }
 ```
 
-Application-side semantic validation checks the returned need/strategy/duration/anchor against the local policy. One bounded repair attempt is allowed. Only `question` and `alternative` become the visible `AiCard` and are persisted with a completed intervention record.
+Application-side semantic validation checks the returned need/strategy/duration/anchor against the local policy, plus field length, actionability, style, safety, and near-duplicate history. One bounded repair attempt is allowed. The visible `AiCard` contains the reflection, question, activity title, alternative, and duration; internal strategy metadata is retained for intervention history.
+
+### Recent intervention context
+
+Only the latest six intervention records are summarized for card generation. The model receives state, a normalized choice, and a bounded previous alternative, not the full raw history or old custom text. Past choices are weak interaction signals only and never establish that an intervention worked or failed.
 
 The overlay opens with three stored quick states before any network request. Crisis-signalling external text is blocked locally and never enters the normal Gemini/repair path.
 

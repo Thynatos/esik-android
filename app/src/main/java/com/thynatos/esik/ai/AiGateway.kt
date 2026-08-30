@@ -15,6 +15,7 @@ interface AiGateway {
         profile: UserProfile,
         currentUsageMinutes: Int,
         input: InterventionInput,
+        recentRecords: List<InterventionRecord> = emptyList(),
     ): AiCard
 
     suspend fun generateDailyReport(

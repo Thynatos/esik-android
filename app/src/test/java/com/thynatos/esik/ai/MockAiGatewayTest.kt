@@ -52,6 +52,22 @@ class MockAiGatewayTest {
             "exercise hobby should be converted to a gentle low-energy version",
             result.lowEnergyActivities.any { it.contains("esne", ignoreCase = true) },
         )
+        assertTrue(result.focusTargets.contains("ders çalışmak"))
+        assertTrue(result.profileSummary.contains("ders", ignoreCase = true))
+    }
+
+    @Test
+    fun sparseProfileFallbackDoesNotInventActivityPreferences() = runBlocking {
+        val result = gateway.generateProfile(
+            ProfileIntake(
+                name = "Ayşe",
+                biography = "Instagram'da daha az otomatik vakit geçirmek istiyorum.",
+            ),
+        )
+
+        assertTrue(result.preferredActivities.isEmpty())
+        assertTrue(result.lowEnergyActivities.none { it.contains("şarkı", ignoreCase = true) })
+        assertTrue(result.profileSummary.contains("Telefonu", ignoreCase = true))
     }
 
     @Test
@@ -68,6 +84,10 @@ class MockAiGatewayTest {
         )
 
         assertTrue(card.question.contains("iki dakika"))
+        assertTrue(card.reflection.isNotBlank())
+        assertTrue(card.activityTitle.isNotBlank())
+        assertEquals(3, card.durationMinutes)
+        assertEquals("micro_start", card.strategy)
         assertTrue(SafetyLanguageValidator.isDisplaySafe(card.question, card.alternative))
     }
 
@@ -114,6 +134,112 @@ class MockAiGatewayTest {
 
         assertTrue(card.question.contains("iki dakika"))
         assertTrue(card.alternative.contains("iki dakika"))
+    }
+
+    @Test
+    fun lowMotivationFallbackUsesMicroStartInsteadOfGenericAdvice() = runBlocking {
+        val card = gateway.generateCard(
+            profile = profile.copy(
+                personalization = PersonalizationProfile(
+                    focusTargets = listOf("ders çalışmak"),
+                ),
+            ),
+            currentUsageMinutes = 78,
+            input = InterventionInput(
+                text = "Motivasyonum düşük",
+                stateId = "low_motivation",
+                stateLabel = "Hiç başlayasım yok",
+                method = InterventionInputMethod.QUICK_REPLY,
+            ),
+        )
+
+        assertEquals("micro_start", card.strategy)
+        assertEquals(3, card.durationMinutes)
+        assertTrue(card.activityTitle.contains("ilk", ignoreCase = true))
+        assertTrue(card.alternative.contains("ders çalışmak"))
+        assertTrue(SafetyLanguageValidator.isDisplaySafe(card.reflection, card.question, card.alternative))
+    }
+
+    @Test
+    fun overwhelmedFallbackReducesTheChoiceToOneNextStep() = runBlocking {
+        val card = gateway.generateCard(
+            profile = profile,
+            currentUsageMinutes = 78,
+            input = InterventionInput(
+                text = "Nereden başlayacağımı bilmiyorum, çok fazla iş var",
+                method = InterventionInputMethod.TEXT,
+            ),
+        )
+
+        assertEquals("micro_start", card.strategy)
+        assertEquals(3, card.durationMinutes)
+        assertTrue(card.question.endsWith("?"))
+        assertTrue(card.alternative.contains("yalnızca birini"))
+    }
+
+    @Test
+    fun fallbackProvidesRichSafeCardsForEveryCanonicalState() = runBlocking {
+        val states = listOf(
+            "tired" to "Biraz yoruldum",
+            "procrastinating" to "Bir şeyi erteliyorum",
+            "relaxing" to "Sadece kafa dağıtıyorum",
+            "bored" to "Biraz sıkıldım",
+            "habit" to "Alışkanlıkla açtım",
+            "waiting" to "Bir şeyi bekliyorum",
+            "low_motivation" to "Motivasyonum düşük",
+            "overwhelmed" to "Her şey bunaltıyor",
+            "late_night" to "Uyumadan önce bakıyorum",
+            "other" to "Başka bir şey",
+        )
+
+        states.forEach { (id, label) ->
+            val card = gateway.generateCard(
+                profile = profile,
+                currentUsageMinutes = 78,
+                input = InterventionInput(
+                    text = label,
+                    stateId = id,
+                    stateLabel = label,
+                    method = InterventionInputMethod.QUICK_REPLY,
+                ),
+            )
+
+            assertTrue("$id reflection", card.reflection.isNotBlank())
+            assertTrue("$id question", card.question.endsWith("?"))
+            assertTrue("$id title", card.activityTitle.isNotBlank())
+            assertTrue("$id alternative", card.alternative.isNotBlank())
+            assertTrue("$id duration", card.durationMinutes > 0)
+            assertTrue(
+                "$id safety",
+                SafetyLanguageValidator.isDisplaySafe(
+                    card.reflection,
+                    card.question,
+                    card.activityTitle,
+                    card.alternative,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun repeatedStateFallbackRotatesLocalAlternatives() = runBlocking {
+        val input = InterventionInput(
+            text = "Biraz yoruldum",
+            stateId = "tired",
+            stateLabel = "Biraz yoruldum",
+            method = InterventionInputMethod.QUICK_REPLY,
+        )
+        val first = gateway.generateCard(profile, 78, input)
+        val second = gateway.generateCard(
+            profile = profile,
+            currentUsageMinutes = 78,
+            input = input,
+            recentRecords = listOf(
+                record(1).copy(stateId = "tired", aiAlternative = first.alternative),
+            ),
+        )
+
+        assertTrue(first.alternative != second.alternative)
     }
 
     @Test
