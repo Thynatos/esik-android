@@ -3,6 +3,7 @@ package com.thynatos.esik.ai
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionInputMethod
 import com.thynatos.esik.data.InterventionRecord
+import com.thynatos.esik.data.PersonalizationProfile
 import com.thynatos.esik.data.ProfileIntake
 import com.thynatos.esik.data.UserChoice
 import com.thynatos.esik.data.UserProfile
@@ -67,6 +68,51 @@ class MockAiGatewayTest {
     }
 
     @Test
+    fun tiredFallbackDoesNotPrescribeHighEffortExercise() = runBlocking {
+        val tiredProfile = profile.copy(
+            hobbies = listOf("koşu", "müzik"),
+            personalization = PersonalizationProfile(
+                preferredActivities = listOf("koşu", "müzik"),
+                lowEnergyActivities = listOf("bir şarkı dinlemek"),
+            ),
+        )
+
+        val card = gateway.generateCard(
+            profile = tiredProfile,
+            currentUsageMinutes = 78,
+            input = InterventionInput(
+                text = "Biraz yoruldum",
+                stateId = "tired",
+                stateLabel = "Biraz yoruldum",
+                method = InterventionInputMethod.QUICK_REPLY,
+            ),
+        )
+
+        assertTrue(card.alternative.contains("müzik") || card.alternative.contains("şarkı"))
+        assertFalse(card.alternative.contains("koşu", ignoreCase = true))
+        assertFalse(card.alternative.contains("spor", ignoreCase = true))
+    }
+
+    @Test
+    fun customTextOverridesGenericStateInFallback() = runBlocking {
+        val card = gateway.generateCard(
+            profile = profile.copy(
+                personalization = PersonalizationProfile(goals = listOf("rapora başlamak")),
+            ),
+            currentUsageMinutes = 78,
+            input = InterventionInput(
+                text = "Ders çalışmam lazım ama başlamayı erteliyorum",
+                stateId = "habit",
+                stateLabel = "Alışkanlıkla açtım",
+                method = InterventionInputMethod.TEXT,
+            ),
+        )
+
+        assertTrue(card.question.contains("iki dakika"))
+        assertTrue(card.alternative.contains("iki dakika"))
+    }
+
+    @Test
     fun reportIsUnavailableBelowSevenRecords() = runBlocking {
         val report = gateway.generateDailyReport(
             profile = profile,
@@ -86,6 +132,8 @@ class MockAiGatewayTest {
         )
 
         assertFalse(report.insufficientData)
+        assertTrue(report.observationQuestion.endsWith('?'))
+        assertTrue(report.microStep.contains("dakika"))
         assertTrue(
             SafetyLanguageValidator.isDisplaySafe(
                 report.observationQuestion,
