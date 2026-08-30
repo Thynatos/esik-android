@@ -66,6 +66,12 @@ data class InterventionPolicy(
     val anchors: PersonalizationAnchors,
     val forbiddenPatterns: List<String>,
     val evidenceSummary: String,
+    /**
+     * Strategy this user has repeatedly reported as helpful in this state, when there is enough
+     * local evidence. It is a hint inside [allowedStrategies], never a requirement: the semantic
+     * validator still accepts any allowed strategy.
+     */
+    val preferredStrategy: InterventionStrategy? = null,
 )
 
 internal data class StructuredAiCard(

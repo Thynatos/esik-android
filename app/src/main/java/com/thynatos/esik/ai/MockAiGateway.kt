@@ -1,6 +1,8 @@
 package com.thynatos.esik.ai
 
 import com.thynatos.esik.data.AiCard
+import com.thynatos.esik.data.AiCardSource
+import com.thynatos.esik.data.CardProvenance
 import com.thynatos.esik.data.DailyReport
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionRecord
@@ -88,8 +90,9 @@ class MockAiGateway : AiGateway {
         profile: UserProfile,
         currentUsageMinutes: Int,
         input: InterventionInput,
+        history: List<InterventionRecord>,
     ): AiCard {
-        val policy = InterventionContextBuilder.build(profile, input)
+        val policy = InterventionContextBuilder.build(profile, input, history)
 
         val question = when (policy.objective) {
             InterventionObjective.PAUSE_AND_RECOVER ->
@@ -143,8 +146,47 @@ class MockAiGateway : AiGateway {
                 "İki dakika boyunca telefonu bırakıp kısa bir ekran molası vermeyi deneyebilirsin."
         }
 
-        return AiCard(question = question, alternative = alternative)
+        return AiCard(
+            question = question,
+            alternative = alternative,
+            provenance = CardProvenance(
+                source = AiCardSource.LOCAL_FALLBACK,
+                stateId = policy.resolvedStateId,
+                needId = policy.need.wireValue,
+                strategyId = describingStrategy(policy).wireValue,
+                durationMinutes = FALLBACK_DURATION_MINUTES
+                    .coerceAtMost(policy.maxDurationMinutes),
+                maxDurationMinutes = policy.maxDurationMinutes,
+                anchor = "",
+                learnedPreferenceApplied = false,
+            ),
+        )
     }
+
+    /**
+     * The strategy that actually describes the deterministic text produced above.
+     *
+     * The offline path still selects its wording from the objective, so the label must follow the
+     * wording rather than the learned preference. Recording a strategy the copy does not match
+     * would poison [StrategyEffectivenessBuilder] with feedback about something else.
+     */
+    private fun describingStrategy(policy: InterventionPolicy): InterventionStrategy =
+        when (policy.objective) {
+            InterventionObjective.PAUSE_AND_RECOVER,
+            InterventionObjective.WIND_DOWN,
+            -> InterventionStrategy.LOW_ENERGY_RESET
+
+            InterventionObjective.MICRO_START -> InterventionStrategy.MICRO_START
+            InterventionObjective.MAKE_BREAK_INTENTIONAL ->
+                InterventionStrategy.TIMED_INTENTIONAL_USE
+
+            InterventionObjective.CHANGE_STIMULUS,
+            InterventionObjective.USE_WAIT_BRIEFLY,
+            -> InterventionStrategy.BRIEF_ACTIVITY
+
+            InterventionObjective.CLARIFY_INTENTION -> InterventionStrategy.ENVIRONMENT_CHANGE
+            InterventionObjective.CLARIFY_NEED -> InterventionStrategy.SENSORY_BREAK
+        }
 
     override suspend fun generateDailyReport(
         profile: UserProfile,
@@ -262,5 +304,8 @@ class MockAiGateway : AiGateway {
 
     private companion object {
         const val REPORT_MINIMUM_RECORDS = 7
+
+        /** Every deterministic alternative above is written as a two-minute action. */
+        const val FALLBACK_DURATION_MINUTES = 2
     }
 }

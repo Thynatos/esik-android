@@ -27,6 +27,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.thynatos.esik.data.InterventionOutcome
+import com.thynatos.esik.data.InterventionRecord
 import com.thynatos.esik.data.UserProfile
 import com.thynatos.esik.ui.components.DeveloperToolsCard
 import com.thynatos.esik.ui.components.EsikCard
@@ -50,6 +52,8 @@ fun HomeScreen(
     canDrawOverlays: Boolean,
     hasNotificationPermission: Boolean,
     reportLoading: Boolean,
+    pendingOutcomeRecord: InterventionRecord?,
+    onReportOutcome: (InterventionRecord, InterventionOutcome) -> Unit,
     onRefresh: () -> Unit,
     onOpenUsagePermission: () -> Unit,
     onOpenOverlayPermission: () -> Unit,
@@ -151,6 +155,10 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
+
+            pendingOutcomeRecord?.let { record ->
+                OutcomeFeedbackCard(record = record, onReportOutcome = onReportOutcome)
             }
 
             EsikCard {
@@ -361,5 +369,57 @@ fun HomeScreen(
                 }
             },
         )
+    }
+}
+
+/**
+ * Asks the user how the alternative they chose to try actually went.
+ *
+ * The answer stays on the device and only reorders strategies the local policy already allows. It
+ * is deliberately not framed as success or failure: "did not help" is as useful as "helped", and
+ * skipping is a first-class answer rather than a missed streak.
+ */
+@Composable
+private fun OutcomeFeedbackCard(
+    record: InterventionRecord,
+    onReportOutcome: (InterventionRecord, InterventionOutcome) -> Unit,
+) {
+    EsikCard(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.large)) {
+            Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall)) {
+                Text(
+                    "SAAT ${record.localTime()} · DENEMEK İSTEDİĞİN ADIM",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(record.aiAlternative, style = MaterialTheme.typography.bodyLarge)
+            }
+            Text(
+                "İşine yaradı mı? Yanıtın cihazından çıkmaz; yalnızca bundan sonraki önerilerin sırasını değiştirir.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(EsikSpacing.small),
+            ) {
+                SecondaryActionButton(
+                    text = "İşe yaradı",
+                    onClick = { onReportOutcome(record, InterventionOutcome.HELPED) },
+                    modifier = Modifier.weight(1f),
+                )
+                SecondaryActionButton(
+                    text = "Pek olmadı",
+                    onClick = { onReportOutcome(record, InterventionOutcome.DID_NOT_HELP) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            TextButton(
+                onClick = { onReportOutcome(record, InterventionOutcome.NOT_TRIED) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Denemedim", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }

@@ -4,6 +4,8 @@ import android.os.SystemClock
 import android.util.Log
 import com.thynatos.esik.BuildConfig
 import com.thynatos.esik.data.AiCard
+import com.thynatos.esik.data.AiCardSource
+import com.thynatos.esik.data.CardProvenance
 import com.thynatos.esik.data.DailyReport
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionRecord
@@ -90,6 +92,7 @@ class GeminiAiGateway(
         profile: UserProfile,
         currentUsageMinutes: Int,
         input: InterventionInput,
+        history: List<InterventionRecord>,
     ): AiCard {
         val startedAt = SystemClock.elapsedRealtime()
         val externalContext = listOf(
@@ -101,7 +104,7 @@ class GeminiAiGateway(
         ).joinToString(" ")
         if (!client.isConfigured) {
             debugResult(TASK_CARD, cardModel, startedAt, SOURCE_FALLBACK, "not_configured")
-            return fallback.generateCard(profile, currentUsageMinutes, input)
+            return fallback.generateCard(profile, currentUsageMinutes, input, history)
         }
         if (containsCrisisSignal(externalContext)) {
             debugResult(
@@ -111,10 +114,10 @@ class GeminiAiGateway(
                 SOURCE_FALLBACK,
                 "crisis_short_circuit",
             )
-            return fallback.generateCard(profile, currentUsageMinutes, input)
+            return fallback.generateCard(profile, currentUsageMinutes, input, history)
         }
 
-        val policy = InterventionContextBuilder.build(profile, input)
+        val policy = InterventionContextBuilder.build(profile, input, history)
         return try {
             val completion = completeJsonWithSchemaFallback(
                 model = cardModel,
@@ -136,7 +139,7 @@ class GeminiAiGateway(
                     SOURCE_LIVE,
                     if (completion.schemaFallbackUsed) "ok_without_schema" else "ok",
                 )
-                firstCard.toVisibleCard()
+                firstCard.toVisibleCard(policy, AiCardSource.LIVE)
             } else {
                 val repaired = repairCard(
                     invalidResponse = completion.text,
@@ -145,7 +148,7 @@ class GeminiAiGateway(
                 )
                 if (repaired != null) {
                     debugResult(TASK_CARD, cardModel, startedAt, SOURCE_REPAIRED, "ok")
-                    repaired.toVisibleCard()
+                    repaired.toVisibleCard(policy, AiCardSource.REPAIRED)
                 } else {
                     debugResult(
                         TASK_CARD,
@@ -154,7 +157,7 @@ class GeminiAiGateway(
                         SOURCE_FALLBACK,
                         firstValidation.errors.firstOrNull() ?: "invalid_live_output",
                     )
-                    fallback.generateCard(profile, currentUsageMinutes, input)
+                    fallback.generateCard(profile, currentUsageMinutes, input, history)
                 }
             }
         } catch (error: Exception) {
@@ -165,7 +168,7 @@ class GeminiAiGateway(
                 SOURCE_FALLBACK,
                 failureCategory(error),
             )
-            fallback.generateCard(profile, currentUsageMinutes, input)
+            fallback.generateCard(profile, currentUsageMinutes, input, history)
         }
     }
 
@@ -384,8 +387,24 @@ class GeminiAiGateway(
         )
     }
 
-    private fun StructuredAiCard.toVisibleCard(): AiCard =
-        AiCard(question = question, alternative = alternative)
+    private fun StructuredAiCard.toVisibleCard(
+        policy: InterventionPolicy,
+        source: AiCardSource,
+    ): AiCard = AiCard(
+        question = question,
+        alternative = alternative,
+        provenance = CardProvenance(
+            source = source,
+            stateId = policy.resolvedStateId,
+            needId = need.wireValue,
+            strategyId = strategy.wireValue,
+            durationMinutes = durationMinutes,
+            maxDurationMinutes = policy.maxDurationMinutes,
+            anchor = personalizationAnchor,
+            learnedPreferenceApplied = policy.preferredStrategy != null &&
+                policy.preferredStrategy == strategy,
+        ),
+    )
 
     private fun extractJson(raw: String): JSONObject {
         val start = raw.indexOf('{')
@@ -449,6 +468,7 @@ class GeminiAiGateway(
             JSONArray(allowedStrategies.map(InterventionStrategy::wireValue).sorted()),
         )
         .put("max_duration_minutes", maxDurationMinutes)
+        .put("user_reported_helpful_strategy", preferredStrategy?.wireValue.orEmpty())
         .put(
             "anchors",
             JSONObject()

@@ -43,6 +43,9 @@ Policy rules:
 - Output Turkish, even when the user wrote in English.
 - Copy need exactly from compiled_policy.need.
 - Choose strategy only from compiled_policy.allowed_strategies.
+- When compiled_policy.user_reported_helpful_strategy is not empty, prefer that strategy. The user
+  already reported it as helpful in this state. It is a preference, not a rule: never choose it if
+  it is missing from allowed_strategies, and never mention it or the user's past behaviour.
 - duration_minutes must be an integer from 1 through compiled_policy.max_duration_minutes.
 - personalization_anchor must be either an exact supplied anchor from compiled_policy.anchors or an empty string.
 - Use custom user text as the strongest evidence, but remain uncertain about motives.

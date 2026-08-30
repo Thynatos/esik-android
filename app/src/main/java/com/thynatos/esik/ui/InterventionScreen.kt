@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,8 +37,11 @@ import com.thynatos.esik.ai.CrisisFilter
 import com.thynatos.esik.ai.MockAiGateway
 import com.thynatos.esik.ai.SafetyLanguageValidator
 import com.thynatos.esik.data.AiCard
+import com.thynatos.esik.data.AiCardSource
+import com.thynatos.esik.data.CardProvenance
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionInputMethod
+import com.thynatos.esik.data.InterventionRecord
 import com.thynatos.esik.data.UserChoice
 import com.thynatos.esik.data.UserProfile
 import com.thynatos.esik.ui.components.EsikCard
@@ -57,6 +61,7 @@ fun InterventionScreen(
     profile: UserProfile,
     usageMinutes: Int,
     aiGateway: AiGateway,
+    history: List<InterventionRecord>,
     onChoice: (InterventionInput, AiCard, UserChoice) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -103,16 +108,16 @@ fun InterventionScreen(
         isLoading = true
         scope.launch {
             val result = try {
-                aiGateway.generateCard(profile, usageMinutes, input)
+                aiGateway.generateCard(profile, usageMinutes, input, history)
             } catch (_: Exception) {
-                MockAiGateway().generateCard(profile, usageMinutes, input)
+                MockAiGateway().generateCard(profile, usageMinutes, input, history)
             }
             generatedCard = if (
                 SafetyLanguageValidator.isDisplaySafe(result.question, result.alternative)
             ) {
                 result
             } else {
-                MockAiGateway().generateCard(profile, usageMinutes, input)
+                MockAiGateway().generateCard(profile, usageMinutes, input, history)
             }
             isLoading = false
         }
@@ -346,6 +351,7 @@ fun InterventionScreen(
                             }
                         }
                     }
+                    CardProvenanceDisclosure(card.provenance)
                     PrimaryActionButton(
                         text = "Bunu deneyeceğim",
                         onClick = {
@@ -380,4 +386,98 @@ fun InterventionScreen(
             }
         }
     }
+}
+
+/**
+ * Shows the locally compiled constraints the card was produced under.
+ *
+ * Eşik claims that the model never sets the threshold and never invents personal facts. This makes
+ * that claim inspectable instead of asking the user to take it on trust. Everything shown here was
+ * decided by the application, not by the model.
+ */
+@Composable
+private fun CardProvenanceDisclosure(provenance: CardProvenance) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.small)) {
+        TextButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (expanded) "Açıklamayı kapat" else "Bu öneri nasıl oluştu?")
+        }
+        AnimatedVisibility(visible = expanded) {
+            EsikCard(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+                Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.medium)) {
+                    ProvenanceRow("Okunan durum", turkishStateLabel(provenance.stateId))
+                    ProvenanceRow("İzin verilen yaklaşım", turkishStrategyLabel(provenance.strategyId))
+                    ProvenanceRow(
+                        label = "Süre sınırı",
+                        value = "${provenance.maxDurationMinutes} dk · uygulamanın koyduğu üst sınır",
+                    )
+                    if (provenance.durationMinutes > 0) {
+                        ProvenanceRow(
+                            label = "Önerilen süre",
+                            value = "${provenance.durationMinutes} dk",
+                        )
+                    }
+                    ProvenanceRow(
+                        label = "Kişisel çıpa",
+                        value = provenance.anchor.ifBlank { "kullanılmadı" },
+                    )
+                    ProvenanceRow("Kaynak", turkishSourceLabel(provenance.source))
+                    if (provenance.learnedPreferenceApplied) {
+                        ProvenanceRow(
+                            label = "Senin geri bildiriminden",
+                            value = "Bu yaklaşımı daha önce işe yaradı olarak işaretlemiştin.",
+                        )
+                    }
+                    Text(
+                        "Bu kısıtları uygulama belirledi, model değil. Günlük hedefini yalnızca sen değiştirebilirsin.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProvenanceRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(EsikSpacing.xSmall)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private fun turkishStateLabel(stateId: String): String = when (stateId) {
+    "tired" -> "Yorgunluk"
+    "procrastinating" -> "Erteleme"
+    "relaxing" -> "Bilinçli mola"
+    "bored" -> "Can sıkıntısı"
+    "waiting" -> "Bekleme"
+    "habit" -> "Alışkanlık"
+    "late_night" -> "Gece kullanımı"
+    else -> "Belirsiz"
+}
+
+private fun turkishStrategyLabel(strategyId: String): String = when (strategyId) {
+    "low_energy_reset" -> "Düşük enerjili sıfırlama"
+    "micro_start" -> "İki dakikalık başlangıç"
+    "timed_intentional_use" -> "Süresi seçilmiş bilinçli kullanım"
+    "environment_change" -> "Ortam değişikliği"
+    "sensory_break" -> "Kısa duyusal mola"
+    "brief_activity" -> "Kısa aktivite"
+    else -> "Belirtilmedi"
+}
+
+private fun turkishSourceLabel(source: AiCardSource): String = when (source) {
+    AiCardSource.LIVE -> "Canlı model · doğrulamayı ilk denemede geçti"
+    AiCardSource.REPAIRED -> "Canlı model · bir kez düzeltildi"
+    AiCardSource.LOCAL_FALLBACK -> "Cihaz içi hazır metin · modele gidilmedi"
 }

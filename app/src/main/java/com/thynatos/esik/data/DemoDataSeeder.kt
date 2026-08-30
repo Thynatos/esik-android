@@ -63,7 +63,68 @@ object DemoDataSeeder {
             sample.toRecord(startOfToday.plusSeconds(secondsFromStart), zone)
         }
 
-        return (historical + today).sortedBy { it.timestampEpochMillis }
+        // Answered moments from earlier days, so the local strategy preference has something real
+        // to work with during a demo. One approach was repeatedly reported as helpful in the tired
+        // state and one was repeatedly reported as unhelpful; nothing else is implied by them.
+        val answered = listOf(
+            FeedbackSample(
+                3, 19, 10, "sensory_break",
+                "Gözlerini iki dakika kapatıp yavaşça nefes alabilirsin.",
+                InterventionOutcome.HELPED,
+            ),
+            FeedbackSample(
+                3, 22, 5, "environment_change",
+                "Telefonu iki dakika başka bir odaya bırakabilirsin.",
+                InterventionOutcome.DID_NOT_HELP,
+            ),
+            FeedbackSample(
+                2, 20, 30, "sensory_break",
+                "İki dakika boyunca omuzlarını gevşetip pencereye bakabilirsin.",
+                InterventionOutcome.HELPED,
+            ),
+            FeedbackSample(
+                2, 23, 10, "environment_change",
+                "Telefonu iki dakika masanın öbür ucuna koyabilirsin.",
+                InterventionOutcome.DID_NOT_HELP,
+            ),
+            FeedbackSample(
+                1, 19, 45, "sensory_break",
+                "Bir bardak su içip iki dakika ekrandan uzaklaşabilirsin.",
+                InterventionOutcome.HELPED,
+            ),
+            FeedbackSample(
+                1, 21, 20, "environment_change",
+                "İki dakika boyunca bulunduğun odayı değiştirebilirsin.",
+                InterventionOutcome.DID_NOT_HELP,
+            ),
+        ).map { sample ->
+            val dateTime = now
+                .minusDays(sample.daysAgo.toLong())
+                .withHour(sample.hour)
+                .withMinute(sample.minute)
+                .withSecond(0)
+                .withNano(0)
+            InterventionRecord(
+                timestampEpochMillis = dateTime.atZone(zone).toInstant().toEpochMilli(),
+                usageMinutes = DEMO_ANSWERED_USAGE_MINUTES,
+                text = "bugün yoruldum",
+                choice = UserChoice.STOPPED,
+                stateId = "tired",
+                stateLabel = "Biraz yoruldum",
+                inputMethod = InterventionInputMethod.QUICK_REPLY,
+                aiQuestion = questionFor("tired"),
+                aiAlternative = sample.alternative,
+                strategyId = sample.strategyId,
+                outcome = sample.outcome,
+                outcomeAtMillis = dateTime
+                    .plusMinutes(DEMO_OUTCOME_DELAY_MINUTES)
+                    .atZone(zone)
+                    .toInstant()
+                    .toEpochMilli(),
+            )
+        }
+
+        return (historical + answered + today).sortedBy { it.timestampEpochMillis }
     }
 
     private fun HistoricalSample.toRecord(
@@ -110,7 +171,17 @@ object DemoDataSeeder {
         inputMethod = InterventionInputMethod.QUICK_REPLY,
         aiQuestion = questionFor(stateId),
         aiAlternative = alternativeFor(stateId),
+        strategyId = strategyFor(stateId),
     )
+
+    private fun strategyFor(stateId: String): String = when (stateId) {
+        "tired", "late_night" -> "low_energy_reset"
+        "procrastinating" -> "micro_start"
+        "relaxing" -> "timed_intentional_use"
+        "bored", "waiting" -> "brief_activity"
+        "habit" -> "environment_change"
+        else -> "sensory_break"
+    }
 
     private fun questionFor(stateId: String): String = when (stateId) {
         "tired" -> "Şu anda kısa bir dinlenme mi, yoksa otomatik bir kaydırma mı arıyorsun?"
@@ -144,4 +215,16 @@ object DemoDataSeeder {
         val stateLabel: String,
         val choice: UserChoice,
     )
+
+    private data class FeedbackSample(
+        val daysAgo: Int,
+        val hour: Int,
+        val minute: Int,
+        val strategyId: String,
+        val alternative: String,
+        val outcome: InterventionOutcome,
+    )
+
+    private const val DEMO_ANSWERED_USAGE_MINUTES = 76
+    private const val DEMO_OUTCOME_DELAY_MINUTES = 12L
 }

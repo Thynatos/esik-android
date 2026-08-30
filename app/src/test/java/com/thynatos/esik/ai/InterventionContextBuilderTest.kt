@@ -2,7 +2,10 @@ package com.thynatos.esik.ai
 
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionInputMethod
+import com.thynatos.esik.data.InterventionOutcome
+import com.thynatos.esik.data.InterventionRecord
 import com.thynatos.esik.data.PersonalizationProfile
+import com.thynatos.esik.data.UserChoice
 import com.thynatos.esik.data.UserProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -144,6 +147,83 @@ class InterventionContextBuilderTest {
         assertNotEquals(tired.need, procrastinating.need)
         assertNotEquals(procrastinating.objective, relaxing.objective)
         assertNotEquals(tired.allowedStrategies, relaxing.allowedStrategies)
+    }
+
+    @Test
+    fun strategyTheUserReportedAsHelpfulBecomesAHintWithoutLeavingTheAllowedSet() {
+        val policy = InterventionContextBuilder.build(
+            profile = profile(),
+            input = quickInput("tired", "Biraz yoruldum"),
+            history = answeredTired("sensory_break", InterventionOutcome.HELPED, times = 3),
+        )
+
+        assertEquals(InterventionStrategy.SENSORY_BREAK, policy.preferredStrategy)
+        assertTrue(policy.allowedStrategies.contains(InterventionStrategy.SENSORY_BREAK))
+        assertTrue(policy.evidenceSummary.contains("user_reported_helpful=sensory_break"))
+    }
+
+    @Test
+    fun strategyTheUserRepeatedlyRejectedIsRemovedFromTheAllowedSet() {
+        val policy = InterventionContextBuilder.build(
+            profile = profile(),
+            input = quickInput("tired", "Biraz yoruldum"),
+            history = answeredTired(
+                strategyId = "environment_change",
+                outcome = InterventionOutcome.DID_NOT_HELP,
+                times = 3,
+            ),
+        )
+
+        assertFalse(policy.allowedStrategies.contains(InterventionStrategy.ENVIRONMENT_CHANGE))
+        assertTrue(policy.allowedStrategies.isNotEmpty())
+        assertTrue(policy.evidenceSummary.contains("strategies_narrowed_by_user_feedback=true"))
+    }
+
+    @Test
+    fun feedbackNeverChangesTheNeedObjectiveOrDurationCeiling() {
+        val input = quickInput("tired", "Biraz yoruldum")
+        val withoutHistory = InterventionContextBuilder.build(profile(), input)
+        val withHistory = InterventionContextBuilder.build(
+            profile = profile(),
+            input = input,
+            history = answeredTired("sensory_break", InterventionOutcome.HELPED, times = 4),
+        )
+
+        assertEquals(withoutHistory.need, withHistory.need)
+        assertEquals(withoutHistory.objective, withHistory.objective)
+        assertEquals(withoutHistory.energy, withHistory.energy)
+        assertEquals(withoutHistory.maxDurationMinutes, withHistory.maxDurationMinutes)
+    }
+
+    @Test
+    fun unansweredHistoryLeavesThePolicyExactlyAsItWas() {
+        val input = quickInput("tired", "Biraz yoruldum")
+        val withoutHistory = InterventionContextBuilder.build(profile(), input)
+        val withHistory = InterventionContextBuilder.build(
+            profile = profile(),
+            input = input,
+            history = answeredTired("sensory_break", InterventionOutcome.UNKNOWN, times = 6),
+        )
+
+        assertEquals(withoutHistory, withHistory)
+    }
+
+    private fun answeredTired(
+        strategyId: String,
+        outcome: InterventionOutcome,
+        times: Int,
+    ): List<InterventionRecord> = (1..times).map { index ->
+        InterventionRecord(
+            timestampEpochMillis = 1_756_000_000_000L + index * 60_000L,
+            usageMinutes = 78,
+            text = "bugün yoruldum",
+            choice = UserChoice.STOPPED,
+            stateId = "tired",
+            stateLabel = "Biraz yoruldum",
+            aiAlternative = "iki dakikalık küçük bir adım",
+            strategyId = strategyId,
+            outcome = outcome,
+        )
     }
 
     private fun quickInput(stateId: String, label: String): InterventionInput =

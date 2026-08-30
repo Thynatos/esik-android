@@ -1,5 +1,6 @@
 package com.thynatos.esik.ai
 
+import com.thynatos.esik.data.AiCardSource
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionInputMethod
 import com.thynatos.esik.data.InterventionRecord
@@ -14,7 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MockAiGatewayTest {
-    private val gateway = MockAiGateway()
+    private val gateway: AiGateway = MockAiGateway()
     private val profile = UserProfile(
         name = "Ayşe",
         department = "İstatistik",
@@ -69,6 +70,26 @@ class MockAiGatewayTest {
 
         assertTrue(card.question.contains("iki dakika"))
         assertTrue(SafetyLanguageValidator.isDisplaySafe(card.question, card.alternative))
+    }
+
+    @Test
+    fun fallbackCardLabelsItsOwnSourceAndTheStrategyItsCopyDescribes() = runBlocking {
+        val card = gateway.generateCard(
+            profile = profile,
+            currentUsageMinutes = 78,
+            input = InterventionInput(
+                text = "Bir şeyi erteliyorum",
+                stateId = "procrastinating",
+                stateLabel = "Bir şeyi erteliyorum",
+                method = InterventionInputMethod.QUICK_REPLY,
+            ),
+        )
+
+        assertEquals(AiCardSource.LOCAL_FALLBACK, card.provenance.source)
+        assertEquals("procrastinating", card.provenance.stateId)
+        assertEquals(InterventionStrategy.MICRO_START.wireValue, card.provenance.strategyId)
+        assertFalse(card.provenance.learnedPreferenceApplied)
+        assertTrue(card.provenance.durationMinutes <= card.provenance.maxDurationMinutes)
     }
 
     @Test

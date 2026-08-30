@@ -67,6 +67,11 @@ class JsonEsikRepository(context: Context) : EsikRepository {
                         ),
                         aiQuestion = item.optString("ai_soru"),
                         aiAlternative = item.optString("ai_alternatif"),
+                        strategyId = item.optString("strateji"),
+                        outcome = InterventionOutcome.fromStorage(item.optString("sonuc")),
+                        outcomeAtMillis = item
+                            .optLong("sonuc_zaman_ms", NO_TIMESTAMP)
+                            .takeUnless { it == NO_TIMESTAMP },
                     ),
                 )
             }
@@ -84,6 +89,29 @@ class JsonEsikRepository(context: Context) : EsikRepository {
         val root = readRoot()
         root.put(KEY_RECORDS, JSONArray().apply { records.forEach { put(it.toJson()) } })
         writeRoot(root)
+    }
+
+    override fun updateRecordOutcome(
+        timestampEpochMillis: Long,
+        outcome: InterventionOutcome,
+        reportedAtMillis: Long,
+    ): Boolean = synchronized(lock) {
+        if (!outcome.isReported) return@synchronized false
+
+        val root = readRoot()
+        val records = root.optJSONArray(KEY_RECORDS) ?: return@synchronized false
+        for (index in 0 until records.length()) {
+            val item = records.optJSONObject(index) ?: continue
+            if (item.optLong("zaman_ms", NO_TIMESTAMP) != timestampEpochMillis) continue
+            if (InterventionOutcome.fromStorage(item.optString("sonuc")).isReported) {
+                return@synchronized false
+            }
+            item.put("sonuc", outcome.storageValue)
+            item.put("sonuc_zaman_ms", reportedAtMillis)
+            writeRoot(root)
+            return@synchronized true
+        }
+        false
     }
 
     override fun clearAll() = synchronized(lock) {
@@ -132,6 +160,9 @@ class JsonEsikRepository(context: Context) : EsikRepository {
             .put("girdi_yontemi", inputMethod.storageValue)
             .put("ai_soru", aiQuestion)
             .put("ai_alternatif", aiAlternative)
+            .put("strateji", strategyId)
+            .put("sonuc", outcome.storageValue)
+            .apply { outcomeAtMillis?.let { put("sonuc_zaman_ms", it) } }
 
     private fun PersonalizationProfile.toJson(): JSONObject =
         JSONObject()
@@ -201,5 +232,6 @@ class JsonEsikRepository(context: Context) : EsikRepository {
         const val KEY_PROFILE = "profil"
         const val KEY_RECORDS = "kayitlar"
         const val DEFAULT_LIMIT_MINUTES = 60
+        const val NO_TIMESTAMP = -1L
     }
 }

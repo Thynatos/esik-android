@@ -91,6 +91,12 @@ fun EsikApp(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // The most recent moment where the user said they would try something and has not answered yet.
+    val pendingOutcomeRecord = remember(records) {
+        val now = System.currentTimeMillis()
+        records.lastOrNull { it.awaitsOutcomeFeedback(now) }
+    }
+
     val hasUsageAccess = remember(context, permissionRefreshNonce) {
         PermissionNavigator.hasUsageAccess(context)
     }
@@ -155,6 +161,15 @@ fun EsikApp(
                 canDrawOverlays = canDrawOverlays,
                 hasNotificationPermission = hasNotificationPermission,
                 reportLoading = reportLoading,
+                pendingOutcomeRecord = pendingOutcomeRecord,
+                onReportOutcome = { record, outcome ->
+                    repository.updateRecordOutcome(
+                        timestampEpochMillis = record.timestampEpochMillis,
+                        outcome = outcome,
+                        reportedAtMillis = System.currentTimeMillis(),
+                    )
+                    records = repository.loadRecords()
+                },
                 onRefresh = {
                     permissionRefreshNonce++
                     currentUsageMinutes = usageReader.todayUsageMinutes(activeProfile.targetPackage)
@@ -249,6 +264,7 @@ fun EsikApp(
                 profile = activeProfile,
                 usageMinutes = interventionUsageMinutes,
                 aiGateway = aiGateway,
+                history = records,
                 onChoice = { input, card, choice ->
                     val record = InterventionRecord(
                         timestampEpochMillis = System.currentTimeMillis(),
@@ -260,6 +276,7 @@ fun EsikApp(
                         inputMethod = input.method,
                         aiQuestion = card.question,
                         aiAlternative = card.alternative,
+                        strategyId = card.provenance.strategyId,
                     )
                     repository.appendRecord(record)
                     records = records + record

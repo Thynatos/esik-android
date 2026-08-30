@@ -2,12 +2,21 @@ package com.thynatos.esik.ai
 
 import com.thynatos.esik.data.InterventionInput
 import com.thynatos.esik.data.InterventionInputMethod
+import com.thynatos.esik.data.InterventionRecord
 import com.thynatos.esik.data.UserProfile
 
 object InterventionContextBuilder {
+    /**
+     * Compiles the authoritative local policy for one intervention moment.
+     *
+     * [history] is the user's own device-local record list. It is used only to reorder strategies
+     * the policy already allows for this state; it never changes the need, the objective, the
+     * duration ceiling, or the user's threshold.
+     */
     fun build(
         profile: UserProfile,
         input: InterventionInput,
+        history: List<InterventionRecord> = emptyList(),
     ): InterventionPolicy {
         val normalizedText = input.text.normalizeForPolicyMatching()
         val inferredState = inferState(normalizedText)
@@ -134,6 +143,10 @@ object InterventionContextBuilder {
             if (base.need == InterventionNeed.INTENTIONAL_BREAK) add("automatic_stop_command")
         }
 
+        val effectiveness = StrategyEffectivenessBuilder.build(history, resolvedState)
+        val allowedStrategies = effectiveness.narrow(base.strategies)
+        val preferredStrategy = effectiveness.preferenceWithin(allowedStrategies)
+
         val source = when {
             input.method == InterventionInputMethod.QUICK_REPLY -> "quick_reply"
             inferredState != null -> "custom_text_cues"
@@ -145,6 +158,13 @@ object InterventionContextBuilder {
             append("; resolved_state=")
             append(resolvedState)
             if (lowEnergy && resolvedState != STATE_TIRED) append("; low_energy_cue=true")
+            preferredStrategy?.let {
+                append("; user_reported_helpful=")
+                append(it.wireValue)
+            }
+            if (allowedStrategies != base.strategies) {
+                append("; strategies_narrowed_by_user_feedback=true")
+            }
         }
 
         return InterventionPolicy(
@@ -152,11 +172,12 @@ object InterventionContextBuilder {
             need = base.need,
             energy = base.energy,
             objective = base.objective,
-            allowedStrategies = base.strategies,
+            allowedStrategies = allowedStrategies,
             maxDurationMinutes = base.maxDurationMinutes,
             anchors = anchors,
             forbiddenPatterns = forbidden,
             evidenceSummary = evidence,
+            preferredStrategy = preferredStrategy,
         )
     }
 

@@ -277,11 +277,14 @@ class OverlayController(
                 background = roundedBackground(accentContainer, 16f)
                 text = "Sana uygun küçük bir seçenek hazırlanıyor…"
             }
+            // Lets the locally compiled policy prefer strategies this user already reported as
+            // helpful. Only identifiers reach the policy; no record text leaves the device.
+            val history = runCatching { repository.loadRecords() }.getOrDefault(emptyList())
             requestJob = scope.launch {
                 val generated = try {
-                    aiGateway.generateCard(profile, usageMinutes, inputData)
+                    aiGateway.generateCard(profile, usageMinutes, inputData, history)
                 } catch (_: Exception) {
-                    MockAiGateway().generateCard(profile, usageMinutes, inputData)
+                    MockAiGateway().generateCard(profile, usageMinutes, inputData, history)
                 }
                 val safeResult = if (
                     SafetyLanguageValidator.isDisplaySafe(
@@ -291,7 +294,7 @@ class OverlayController(
                 ) {
                     generated
                 } else {
-                    MockAiGateway().generateCard(profile, usageMinutes, inputData)
+                    MockAiGateway().generateCard(profile, usageMinutes, inputData, history)
                 }
                 renderCard(inputData, safeResult)
             }
@@ -443,6 +446,7 @@ class OverlayController(
                 inputMethod = input.method,
                 aiQuestion = card.question,
                 aiAlternative = card.alternative,
+                strategyId = card.provenance.strategyId,
             ),
         )
     }
