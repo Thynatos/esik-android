@@ -19,7 +19,7 @@ data class UserProfile(
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
 ) {
     companion object {
-        const val CURRENT_SCHEMA_VERSION: Int = 3
+        const val CURRENT_SCHEMA_VERSION: Int = 4
     }
 }
 
@@ -172,6 +172,12 @@ data class InterventionRecord(
     val aiActivityTitle: String = "",
     val aiDurationMinutes: Int = 0,
     val aiStrategy: String = "",
+    /** Why this moment was interrupted: the user's own threshold, or a behavioural pattern. */
+    val trigger: String = "",
+    /** State the app guessed from behaviour before asking, if it had enough evidence to guess. */
+    val hypothesisStateId: String = "",
+    /** Whether the user confirmed that guess. Null means no guess was offered. */
+    val hypothesisAccepted: Boolean? = null,
 ) {
     fun localTime(zoneId: ZoneId = ZoneId.systemDefault()): String =
         TIME_FORMATTER.format(Instant.ofEpochMilli(timestampEpochMillis).atZone(zoneId))
