@@ -4,7 +4,6 @@ import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
-import android.os.BatteryManager
 import android.os.Build
 import android.os.Process
 import java.time.LocalDate
@@ -75,10 +74,8 @@ class UsageStatsReader(context: Context) {
     }
 
     /**
-     * Maps platform events into the plain samples the analyzer understands.
-     *
-     * This is the same `queryEvents` call the foreground check already makes and the same permission
-     * the user already granted; the app was simply discarding everything except the last event.
+     * Reads recent event shape only to contextualize an intervention that already qualified through
+     * the user's own threshold. These events never create an intervention by themselves.
      */
     fun recentEvents(
         nowMillis: Long = System.currentTimeMillis(),
@@ -139,13 +136,7 @@ class UsageStatsReader(context: Context) {
             UsageEvents.Event.MOVE_TO_BACKGROUND
         }
 
-    /** Charging while lying still late at night is a different situation from charging at a desk. */
-    fun isCharging(): Boolean = runCatching {
-        appContext.getSystemService(BatteryManager::class.java)?.isCharging == true
-    }.getOrDefault(false)
-
     companion object {
-        /** Long enough for a personal session-length baseline, short enough to stay cheap. */
         const val DEFAULT_PATTERN_WINDOW_MILLIS: Long = 2L * 60L * 60L * 1_000L
     }
 }
