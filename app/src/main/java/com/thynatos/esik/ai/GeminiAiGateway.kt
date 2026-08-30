@@ -214,7 +214,7 @@ class GeminiAiGateway(
                     currentUsageMinutes = currentUsageMinutes,
                     evidence = evidence,
                 ).toString(2),
-                maxTokens = 520,
+                maxTokens = 2_048,
                 temperature = 0.1,
                 responseSchema = REPORT_RESPONSE_SCHEMA,
             )
@@ -614,7 +614,6 @@ class GeminiAiGateway(
 
         val CARD_RESPONSE_SCHEMA: JSONObject = JSONObject()
             .put("type", "object")
-            .put("additionalProperties", false)
             .put(
                 "properties",
                 JSONObject()
@@ -665,7 +664,6 @@ class GeminiAiGateway(
 
         val REPORT_RESPONSE_SCHEMA: JSONObject = JSONObject()
             .put("type", "object")
-            .put("additionalProperties", false)
             .put(
                 "properties",
                 JSONObject()
@@ -686,7 +684,6 @@ class GeminiAiGateway(
 
         val PROFILE_RESPONSE_SCHEMA: JSONObject = JSONObject()
             .put("type", "object")
-            .put("additionalProperties", false)
             .put(
                 "properties",
                 JSONObject()
@@ -731,7 +728,6 @@ class GeminiAiGateway(
                                 "items",
                                 JSONObject()
                                     .put("type", "object")
-                                    .put("additionalProperties", false)
                                     .put(
                                         "properties",
                                         JSONObject()
