@@ -50,7 +50,7 @@ internal object AiCardSemanticValidator {
             val anchor = card.personalizationAnchor.trim()
             if (anchor.isNotEmpty()) {
                 val allowedAnchors = policy.anchors.all
-                    .map(String::normalizeForSemanticMatching)
+                    .map { value -> value.normalizeForSemanticMatching() }
                     .toSet()
                 if (anchor.normalizeForSemanticMatching() !in allowedAnchors) {
                     add("personalization_anchor_not_supplied_by_user")
