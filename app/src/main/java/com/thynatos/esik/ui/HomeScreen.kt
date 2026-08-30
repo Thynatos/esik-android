@@ -49,14 +49,14 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         // App Logo & Welcome Header
-        EsikAppHeader(userName = profile.name)
-
-        Text(
-            text = "Bilinçli kullanım dengesi oluşturuyoruz.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = (-8).dp),
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            EsikAppHeader(userName = profile.name)
+            Text(
+                text = "Bilinçli kullanım dengesi oluşturuyoruz.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         // 1. Hero Card (Usage & Progress)
         UsageHeroCard(
