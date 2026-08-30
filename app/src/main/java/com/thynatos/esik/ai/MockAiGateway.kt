@@ -217,6 +217,8 @@ class MockAiGateway : AiGateway {
                 "Bir bardak su içip iki dakika ekrandan uzaklaşmayı deneyebilirsin."
             anchor.containsAny("yürüyüş", "walk") ->
                 "İki dakikalık yavaş bir yürüyüş yapıp sonra yeniden karar verebilirsin."
+            anchor.containsAny("esneme", "esnemek", "stretch") ->
+                "İki dakika hafifçe esneyip sonra yeniden karar verebilirsin."
             else ->
                 "$anchor için iki dakika ayırmayı deneyebilirsin."
         }
@@ -226,6 +228,17 @@ class MockAiGateway : AiGateway {
         hobby.containsAny("müzik", "şarkı", "music", "song") -> "bir şarkı dinlemek"
         hobby.containsAny("kitap", "oku", "book", "read") -> "iki sayfa okumak"
         hobby.containsAny("gitar", "guitar") -> "iki dakika gitar çalmak"
+        hobby.containsAny(
+            "koşu",
+            "koşmak",
+            "spor",
+            "egzersiz",
+            "run",
+            "running",
+            "exercise",
+            "workout",
+            "gym",
+        ) -> "iki dakika hafifçe esnemek"
         else -> "$hobby için iki dakika ayırmak"
     }
 
