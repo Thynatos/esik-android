@@ -133,7 +133,7 @@ Before Gemini is called, the app resolves the current context locally. The dynam
 {
   "resolved_state_id": "procrastinating",
   "need": "activation",
-  "energy": "medium",
+  "energy": "normal",
   "objective": "micro_start",
   "allowed_strategies": ["micro_start"],
   "max_duration_minutes": 5,
