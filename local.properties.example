@@ -8,5 +8,8 @@ sdk.dir=/absolute/path/to/Android/Sdk
 GEMINI_API_KEY=
 
 # Optional model overrides. The app falls back locally if a model is unavailable.
+# GEMINI_FAST_MODEL remains the backwards-compatible default for profile and card tasks.
 GEMINI_FAST_MODEL=gemini-2.5-flash-lite
+GEMINI_PROFILE_MODEL=gemini-2.5-flash-lite
+GEMINI_CARD_MODEL=gemini-2.5-flash-lite
 GEMINI_REPORT_MODEL=gemini-2.5-flash
