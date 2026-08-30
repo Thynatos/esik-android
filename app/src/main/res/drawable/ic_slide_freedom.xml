@@ -1,0 +1,59 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    
+    <!-- Outer Soft Glow Circle -->
+    <path
+        android:pathData="M60,10 A50,50 0 1,0 60,110 A50,50 0 1,0 60,10 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="10"
+                android:startY="10"
+                android:endX="110"
+                android:endY="110"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FEF3C7" />
+                <item android:offset="1.0" android:color="#FDE68A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Gentle Balance Scales / Pause Emblem -->
+    <path
+        android:pathData="M60,34 L60,82"
+        android:strokeWidth="6"
+        android:strokeColor="#78350F"
+        android:strokeLineCap="round" />
+
+    <path
+        android:pathData="M38,46 L82,46"
+        android:strokeWidth="5"
+        android:strokeColor="#B45309"
+        android:strokeLineCap="round" />
+
+    <!-- Left Bowl -->
+    <path
+        android:pathData="M34,50 L42,66 L26,66 Z"
+        android:strokeWidth="3"
+        android:strokeColor="#D97706"
+        android:fillColor="#FBBF24"
+        android:strokeLineJoin="round" />
+
+    <!-- Right Bowl -->
+    <path
+        android:pathData="M86,50 L94,66 L78,66 Z"
+        android:strokeWidth="3"
+        android:strokeColor="#D97706"
+        android:fillColor="#FBBF24"
+        android:strokeLineJoin="round" />
+
+    <!-- Base Stand -->
+    <path
+        android:pathData="M46,84 L74,84"
+        android:strokeWidth="6"
+        android:strokeColor="#78350F"
+        android:strokeLineCap="round" />
+</vector>
