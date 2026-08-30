@@ -10,12 +10,9 @@ data class UsageEventSample(
 enum class UsageEventType {
     FOREGROUND,
     BACKGROUND,
-
-    /** Screen turned off or the keyguard appeared: any continuous-use run ends here. */
     SCREEN_OFF,
 }
 
-/** One continuous foreground stretch of a single app. [endMillis] is null while it is still open. */
 data class AppSession(
     val packageName: String,
     val startMillis: Long,
@@ -29,11 +26,7 @@ data class AppSession(
 }
 
 /**
- * What the user's recent behaviour looks like, independent of how many minutes they have spent.
- *
- * Total daily minutes are a poor description of a difficult moment: an hour of deliberate viewing is
- * not the same as twelve minutes of opening and closing the same app. These fields describe the
- * shape of the behaviour so the app can react to the shape rather than only to the total.
+ * Recent usage shape. It is context only: this object never decides whether an intervention fires.
  */
 data class UsagePatternSnapshot(
     val targetOpenCount: Int,
@@ -41,11 +34,8 @@ data class UsagePatternSnapshot(
     val currentSessionMillis: Long,
     val completedSessionCount: Int,
     val medianSessionMillis: Long,
-    /** Gap between the previous target session ending and the current one starting; -1 if unknown. */
     val lastGapMillis: Long,
-    /** App that was in the foreground immediately before the current target session. */
     val previousPackage: String,
-    /** How long the device has been in continuous use across all apps, without an idle break. */
     val continuousActivityMillis: Long,
 ) {
     companion object {
@@ -64,23 +54,17 @@ data class UsagePatternSnapshot(
     }
 }
 
-/**
- * Turns a raw event list into sessions and behavioural measures.
- *
- * Deliberately free of Android types so every rule below is unit-testable. `UsageStatsReader` is
- * responsible only for mapping platform events into [UsageEventSample].
- */
 object UsageSessionAnalyzer {
-    /** Two app switches closer together than this still count as one continuous run of use. */
     const val DEFAULT_IDLE_GAP_MILLIS: Long = 3L * 60L * 1_000L
+    const val DEFAULT_OPEN_WINDOW_MILLIS: Long = 10L * 60L * 1_000L
 
     /**
-     * Window for counting repeated opens.
-     *
-     * Session length and the continuous-use run are read from the whole event list, but "opened it
-     * again and again" only means something over a short stretch.
+     * Activity-to-Activity navigation inside one package may emit PAUSED/RESUMED. Adjacent sessions
+     * of the same package separated by only a few seconds are therefore treated as one session,
+     * unless a screen-off event occurred between them. A real leave/reopen normally contains a
+     * foreground session from another package and remains separate.
      */
-    const val DEFAULT_OPEN_WINDOW_MILLIS: Long = 10L * 60L * 1_000L
+    const val SAME_PACKAGE_TRANSITION_GRACE_MILLIS: Long = 5_000L
 
     fun analyze(
         events: List<UsageEventSample>,
@@ -92,7 +76,7 @@ object UsageSessionAnalyzer {
         if (targetPackage.isBlank()) return UsagePatternSnapshot.EMPTY
 
         val ordered = events.sortedBy(UsageEventSample::timestampMillis)
-        val sessions = buildSessions(ordered, nowMillis)
+        val sessions = coalesceSamePackageTransitions(buildSessions(ordered), ordered)
         val targetSessions = sessions.filter { it.packageName == targetPackage }
         if (targetSessions.isEmpty()) {
             return UsagePatternSnapshot.EMPTY.copy(
@@ -103,8 +87,8 @@ object UsageSessionAnalyzer {
         val current = targetSessions.lastOrNull()?.takeIf(AppSession::isOpen)
         val completed = targetSessions.filterNot(AppSession::isOpen)
         val currentIndex = current?.let(sessions::indexOf) ?: -1
-
         val openWindowStart = nowMillis - openWindowMillis
+
         return UsagePatternSnapshot(
             targetOpenCount = targetSessions.count { it.startMillis >= openWindowStart },
             isTargetForeground = current != null,
@@ -117,16 +101,7 @@ object UsageSessionAnalyzer {
         )
     }
 
-    /**
-     * Walks the event list as a state machine.
-     *
-     * A foreground event for one app implicitly ends whatever else was open, because the platform
-     * does not guarantee a matching background event for the app being replaced.
-     */
-    private fun buildSessions(
-        ordered: List<UsageEventSample>,
-        nowMillis: Long,
-    ): List<AppSession> {
+    private fun buildSessions(ordered: List<UsageEventSample>): List<AppSession> {
         val sessions = mutableListOf<AppSession>()
         var openPackage: String? = null
         var openStart = 0L
@@ -154,10 +129,39 @@ object UsageSessionAnalyzer {
             }
         }
 
-        openPackage?.let { packageName ->
-            sessions += AppSession(packageName, openStart, null)
-        }
+        openPackage?.let { packageName -> sessions += AppSession(packageName, openStart, null) }
         return sessions
+    }
+
+    private fun coalesceSamePackageTransitions(
+        sessions: List<AppSession>,
+        ordered: List<UsageEventSample>,
+    ): List<AppSession> {
+        if (sessions.size < 2) return sessions
+        val merged = mutableListOf<AppSession>()
+
+        sessions.forEach { session ->
+            val previous = merged.lastOrNull()
+            val previousEnd = previous?.endMillis
+            val gap = if (previousEnd != null) session.startMillis - previousEnd else Long.MAX_VALUE
+            val screenOffBetween = previousEnd != null && ordered.any { event ->
+                event.type == UsageEventType.SCREEN_OFF &&
+                    event.timestampMillis in previousEnd..session.startMillis
+            }
+
+            if (
+                previous != null &&
+                previous.packageName == session.packageName &&
+                previousEnd != null &&
+                gap in 0..SAME_PACKAGE_TRANSITION_GRACE_MILLIS &&
+                !screenOffBetween
+            ) {
+                merged[merged.lastIndex] = previous.copy(endMillis = session.endMillis)
+            } else {
+                merged += session
+            }
+        }
+        return merged
     }
 
     private fun lastGapMillis(
@@ -177,19 +181,10 @@ object UsageSessionAnalyzer {
         if (values.isEmpty()) return 0L
         val sorted = values.sorted()
         val middle = sorted.size / 2
-        return if (sorted.size % 2 == 1) {
-            sorted[middle]
-        } else {
-            (sorted[middle - 1] + sorted[middle]) / 2L
-        }
+        return if (sorted.size % 2 == 1) sorted[middle]
+        else (sorted[middle - 1] + sorted[middle]) / 2L
     }
 
-    /**
-     * Length of the current unbroken run of device use.
-     *
-     * Sessions separated by less than [idleGapMillis] belong to the same run. A screen-off event
-     * always ends the run, and a run that has already finished reports zero.
-     */
     private fun continuousActivityMillis(
         sessions: List<AppSession>,
         ordered: List<UsageEventSample>,
@@ -197,24 +192,19 @@ object UsageSessionAnalyzer {
         idleGapMillis: Long,
     ): Long {
         if (sessions.isEmpty()) return 0L
-
         val lastSession = sessions.last()
         val lastEnd = lastSession.endMillis ?: nowMillis
         if (nowMillis - lastEnd > idleGapMillis) return 0L
 
         val lastScreenOff = ordered.lastOrNull { it.type == UsageEventType.SCREEN_OFF }?.timestampMillis
         var runStart = lastSession.startMillis
-
         for (index in sessions.lastIndex downTo 1) {
             val earlier = sessions[index - 1]
             val earlierEnd = earlier.endMillis ?: continue
             if (sessions[index].startMillis - earlierEnd > idleGapMillis) break
             runStart = earlier.startMillis
         }
-
-        if (lastScreenOff != null && lastScreenOff > runStart) {
-            runStart = lastScreenOff
-        }
+        if (lastScreenOff != null && lastScreenOff > runStart) runStart = lastScreenOff
         return (nowMillis - runStart).coerceAtLeast(0L)
     }
 }
