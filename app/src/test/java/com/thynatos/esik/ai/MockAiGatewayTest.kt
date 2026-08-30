@@ -48,6 +48,10 @@ class MockAiGatewayTest {
             result.recurringContexts.contains("erteleme"),
         )
         assertTrue("explicit hobby should be retained", result.preferredActivities.contains("gitar"))
+        assertTrue(
+            "exercise hobby should be converted to a gentle low-energy version",
+            result.lowEnergyActivities.any { it.contains("esne", ignoreCase = true) },
+        )
     }
 
     @Test
