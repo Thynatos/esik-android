@@ -83,7 +83,7 @@ Do not request or claim chain-of-thought. Prompt design is structured + compact 
 
 - Inspect actual files before editing; do not assume old handoff paths are current.
 - Prefer narrow changes over architecture-heavy refactors during the hackathon.
-- Keep 60-second monitor polling and 15-minute cooldown unless a product decision explicitly changes them.
+- Keep the owner-approved 5-second monitor polling and 15-minute cooldown unless a later product decision explicitly changes them.
 - Do not use Accessibility Service as a shortcut.
 - Do not silently remove privacy/safety/fallback behavior to make a feature easier.
 - For pure logic, add/update unit tests.

@@ -192,7 +192,7 @@ class UsageMonitorService : Service() {
         private const val CHANNEL_ID = "esik_usage_monitor"
         private const val NOTIFICATION_ID = 1001
         private const val INITIAL_DELAY_SECONDS = 2L
-        private const val POLL_INTERVAL_SECONDS = 60L
+        private const val POLL_INTERVAL_SECONDS = 5L
         private const val PREFERENCES_NAME = "esik_monitor"
         private const val KEY_LAST_SHOWN_AT = "last_overlay_at"
         private const val KEY_MONITORING_ENABLED = "monitoring_enabled"

@@ -15,7 +15,7 @@ The goal of this pass is to finish the current product and repository workflow f
 | User-defined threshold | PASS | Threshold is always entered/changed by the user. AI does not choose it. |
 | Usage Access | PASS | Guided system-settings flow validated. |
 | Usage measurement | PASS | `UsageStatsManager` values validated against the selected target app. |
-| Foreground monitoring | PASS | Foreground service and 60-second polling validated. |
+| Foreground monitoring | IMPLEMENTED / device retest required | Foreground service now polls every 5 seconds for responsive target-app detection; focused physical-device timing validation remains. |
 | Monitoring notification | IMPLEMENTED | Android 13+ notification permission is requested contextually when monitoring starts, remains optional for core tracking, and can be repaired from Home. |
 | Threshold trigger | PASS | Real target-app trigger validated on physical Android hardware. |
 | Cooldown | PASS | 15-minute cooldown works; changing the limit resets it for testing. |
@@ -77,7 +77,7 @@ Confirmed:
 - both final decisions dismiss correctly;
 - seeded daily report opens and generates successfully.
 
-A finalization-only polish pass was added afterward: launcher/notification icons, report loading state, visible/confirmed data deletion, standard system-Back routing, and Android 13+ monitoring-notification permission handling. After pulling the latest baseline, these additions need only a short smoke check; they do not change the validated threshold/overlay/AI decision logic.
+A finalization-only polish pass was added afterward: launcher/notification icons, report loading state, visible/confirmed data deletion, standard system-Back routing, and Android 13+ monitoring-notification permission handling. A later release-blocker fix reduced foreground polling from 60 seconds to 5 seconds so an already-running monitor detects the target app promptly. After pulling the latest candidate, these additions and the faster polling need a short physical-device smoke check; they do not change the threshold, cooldown, overlay, or AI decision policy.
 
 ## AI configuration used for the validated demo build
 
@@ -141,7 +141,7 @@ Current instructions are synchronized across `AGENTS.md`, `COPILOT_PROMPT.md`, `
 These are final release/submission tasks, not new product features:
 
 - keep GitHub Actions green after each integrated feature;
-- after the latest finalization polish, do one short install/visual smoke check for the launcher icon, monitoring notification/permission, report-loading state, data-delete confirmation, and system Back behavior;
+- after the latest finalization polish, do one short install/physical-device smoke check for the launcher icon, monitoring notification/permission, report-loading state, data-delete confirmation, system Back behavior, and an above-threshold overlay appearing within about 5–10 seconds of opening the target app;
 - update this document when a feature changes the validated demo route;
 - run the exact final demo route twice consecutively after the last optional feature is merged;
 - capture a backup screen recording of the final demo route;
